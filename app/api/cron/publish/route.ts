@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { GoogleGenAI } from '@google/genai'
 import { createServiceClient } from '@/lib/supabase/server'
 import {
   publishToWordPress,
@@ -9,24 +10,64 @@ import {
   type WordPressSite,
 } from '@/lib/wordpress/client'
 
+const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' })
+
 /**
- * 이미지 서버 HTTP 호출 (localhost:3001)
- * @napi-rs/canvas native 모듈을 Next.js에서 직접 실행 불가 → 별도 image-server.mjs로 분리
+ * 기사 내용에서 이미지용 영문 프롬프트 생성
  */
-async function generateCardImageViaServer(data: {
-  title: string; subtitle?: string; category: string; language: string;
-  points?: Array<{ label: string; value: string }>; siteName?: string
-}): Promise<Buffer> {
-  const res = await fetch('http://localhost:3001/image', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-    signal: AbortSignal.timeout(120_000),  // 120초
-  })
-  if (!res.ok) throw new Error(`image-server 응답 오류: ${res.status} ${await res.text()}`)
-  const arrayBuffer = await res.arrayBuffer()
-  return Buffer.from(arrayBuffer)
+function buildImagePrompt(title: string, category: string, h2Headings: string[], index: number): string {
+  const catMap: Record<string, string> = {
+    'health': 'health and wellness', 'skin-care': 'skincare and beauty',
+    'nutrition': 'nutrition and diet', 'fitness': 'fitness and exercise',
+    'medical': 'medical and healthcare', 'beauty': 'beauty and cosmetics',
+    'diet': 'diet and weight loss', 'supplement': 'supplements and vitamins',
+    'mental-health': 'mental health and mindfulness', 'lifestyle': 'healthy lifestyle',
+  }
+  const catEn = catMap[category] || category.replace(/-/g, ' ')
+
+  // 이미지마다 다른 시각적 테마
+  const themes = [
+    `professional studio photo, clean modern style`,
+    `lifestyle photography, warm natural lighting`,
+    `flat lay composition, minimalist aesthetic`,
+    `close-up detail shot, high contrast`,
+    `editorial photography, vibrant colors`,
+  ]
+  const theme = themes[index % themes.length]
+  const sectionHint = h2Headings[index] ? `, specifically about "${h2Headings[index].slice(0, 40)}"` : ''
+
+  return `High-quality, professional photograph for a ${catEn} blog article titled "${title.slice(0, 60)}"${sectionHint}. The image should be visually compelling and relevant to the topic. Style: ${theme}. No text, no watermarks, no logos in the image. Photorealistic, magazine quality, 1:1 aspect ratio.`
 }
+
+/**
+ * Gemini AI 이미지 생성 (gemini-2.0-flash-preview-image-generation)
+ */
+async function generateImageViaGemini(
+  prompt: string
+): Promise<Buffer | null> {
+  try {
+    const response = await genai.models.generateContent({
+      model: 'gemini-2.0-flash-preview-image-generation',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        responseModalities: ['IMAGE'],
+        numberOfImages: 1,
+      } as Record<string, unknown>,
+    })
+    const parts = response.candidates?.[0]?.content?.parts
+    if (!parts) return null
+    for (const part of parts) {
+      if (part.inlineData?.data) {
+        return Buffer.from(part.inlineData.data, 'base64')
+      }
+    }
+    return null
+  } catch (err) {
+    console.warn('[Gemini Image] 생성 실패:', err)
+    return null
+  }
+}
+
 
 /**
  * Vercel Cron Job 핸들러
@@ -121,45 +162,53 @@ export async function GET(request: NextRequest) {
       if (catId) wpCategoryIds = [catId]
     }
 
-    // ── Step 1: 이미지 미리 생성 & 업로드 ──
+    // ── Step 1: Gemini AI 이미지 생성 & 업로드 ──
     const mediaItems: Array<{ id: number; url: string }> = []
-    try {
-      const cardCategory = (log.category || site.category || 'health') as string
-      const cardLang = (log.language || 'en') as 'ko' | 'en' | 'ja'
-      const numImages = 1 + Math.floor(Math.random() * 8) // 1~8개 랜덤
+    const geminiKey = process.env.GEMINI_API_KEY
+    if (geminiKey?.startsWith('AIza')) {
+      try {
+        const imgCategory = (log.category || site.category || 'health') as string
+        const numImages = 1 + Math.floor(Math.random() * 5) // 1~5개 랜덤
 
-      const cardBase = {
-        title:    finalTitle,
-        subtitle: log.keyword_text || '',
-        category: cardCategory,
-        language: cardLang,
-        points: [
-          { label: '카테고리', value: cardCategory.replace(/-/g, ' ').toUpperCase() },
-          { label: '발행', value: new Date().toLocaleDateString('ko-KR') },
-          { label: '사이트', value: site.name || 'SEO Writer' },
-        ],
-        siteName: site.name,
-      }
+        // H2 섹션 제목 추출 (이미지별 다른 프롬프트 생성에 사용)
+        const h2Headings = [...cleanContent.matchAll(/<h2[^>]*>(.*?)<\/h2>/gi)]
+          .map(m => m[1].replace(/<[^>]+>/g, '').trim())
+          .filter(s => s.length > 2)
 
-      for (let i = 0; i < numImages; i++) {
-        try {
-          const imgBuffer = await generateCardImageViaServer(cardBase)
-          const slug = finalTitle.replace(/[^a-zA-Z0-9가-힣]/g, '-').slice(0, 40)
-          const filename = `cron-${slug}-${i + 1}-${Date.now()}.png`
-          const media = await uploadImageToWordPress(site, imgBuffer, filename, `${finalTitle} 이미지 ${i + 1}`)
-          if (media) {
-            mediaItems.push(media)
-            console.log(`[Cron] ✅ 이미지 ${i + 1}/${numImages} 업로드 완료 (id: ${media.id})`)
-          } else {
-            console.warn(`[Cron] ⚠️ 이미지 ${i + 1}/${numImages} 업로드 실패 (null 반환)`)
+        console.log(`[Cron] 🎨 Gemini 이미지 ${numImages}개 생성 시작: "${finalTitle}"`)
+
+        for (let i = 0; i < numImages; i++) {
+          try {
+            const prompt = buildImagePrompt(finalTitle, imgCategory, h2Headings, i)
+            console.log(`[Cron] 🖼 이미지 ${i + 1}/${numImages} 프롬프트: ${prompt.slice(0, 80)}...`)
+
+            const imgBuffer = await generateImageViaGemini(prompt)
+            if (!imgBuffer) {
+              console.warn(`[Cron] ⚠️ 이미지 ${i + 1}/${numImages} Gemini 생성 실패 (null)`)
+              continue
+            }
+
+            const slug = finalTitle.replace(/[^a-zA-Z0-9가-힣]/g, '-').slice(0, 40)
+            const filename = `ai-${slug}-${i + 1}-${Date.now()}.png`
+            const media = await uploadImageToWordPress(
+              site, imgBuffer, filename, `${finalTitle} 이미지 ${i + 1}`
+            )
+            if (media) {
+              mediaItems.push(media)
+              console.log(`[Cron] ✅ 이미지 ${i + 1}/${numImages} 업로드 완료 (id: ${media.id})`)
+            }
+            // Gemini API 속도 제한 방지 (이미지당 3초 간격)
+            if (i < numImages - 1) await new Promise(r => setTimeout(r, 3000))
+          } catch (singleImgErr) {
+            console.warn(`[Cron] ⚠️ 이미지 ${i + 1}/${numImages} 오류:`, singleImgErr)
           }
-        } catch (singleImgErr) {
-          console.warn(`[Cron] ⚠️ 이미지 ${i + 1}/${numImages} 생성/업로드 오류:`, singleImgErr)
         }
+        console.log(`[Cron] 이미지 ${mediaItems.length}개 업로드 완료`)
+      } catch (imgErr) {
+        console.warn('[Cron] 이미지 생성 실패, 이미지 없이 발행:', imgErr)
       }
-      console.log(`[Cron] 이미지 ${mediaItems.length}개 업로드 완료`)
-    } catch (imgErr) {
-      console.warn('[Cron] 이미지 사전 생성 실패, 이미지 없이 발행:', imgErr)
+    } else {
+      console.warn('[Cron] ⚠️ GEMINI_API_KEY 미설정 — 이미지 없이 발행')
     }
 
     // ── Step 2: 나머지 이미지를 H2 뒤에 본문에 삽입 ──

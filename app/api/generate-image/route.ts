@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
  * @napi-rs/canvas native 모듈을 Next.js에서 직접 실행 불가 → 별도 image-server.mjs로 분리
  */
 async function generateCardImageViaServer(data: Record<string, unknown>): Promise<Buffer> {
-  const res = await fetch('http://localhost:3001/image', {
+  const res = await fetch('http://localhost:3002/image', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),

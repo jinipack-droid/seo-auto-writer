@@ -197,6 +197,10 @@ export async function GET(request: NextRequest) {
 ${seoTemplate.contentStructure}
 ${FIXED_SEO_REQUIREMENTS}
 
+[이미지 문구 생성 필수]
+본문 맨 마지막 줄에 아래 형식으로 이미지용 핵심 문구 4개를 언어에 맞게, 각 10~20자 이내로 작성하세요:
+<!-- IMG_CAPTIONS: 문구1|문구2|문구3|문구4 -->
+
 OUTPUT: 코드블록 없이 HTML만 출력
 <!-- META: [메타디스크립션] -->
 <!-- TITLE: [H1 제목] -->
@@ -214,6 +218,11 @@ OUTPUT: 코드블록 없이 HTML만 출력
         const rawContent = message.content[0].type === 'text' ? message.content[0].text : ''
         const titleMatch = rawContent.match(/<!--\s*TITLE:\s*(.*?)\s*-->/)
         const metaMatch  = rawContent.match(/<!--\s*META:\s*(.*?)\s*-->/)
+        // 이미지 캡션 파싱 (Claude가 생성한 이미지 문구)
+        const imgCaptionsMatch = rawContent.match(/<!--\s*IMG_CAPTIONS:\s*([^-]*?)\s*-->/i)
+        const imageCaptions = imgCaptionsMatch
+          ? imgCaptionsMatch[1].split('|').map((s: string) => s.trim()).filter(Boolean).slice(0, 4)
+          : []
         const finalTitle = titleMatch?.[1] || `[${seoTemplate.id}] ${randomKw.keyword}`
         const scheduledAt = randomPublishTime(i)
 
@@ -221,6 +230,7 @@ OUTPUT: 코드블록 없이 HTML만 출력
         const contentCat  = randomKw.category || site.category || 'health'
         const finalContent = rawContent
           .replace(/\[INTERNAL_LINK:\s*([^\]]+)\]/g, '')   // 플레이스홀더 제거
+          .replace(/<!--\s*IMG_CAPTIONS[^>]*-->/gi, '')       // 이미지 캡션 주석 제거
           .replace(/<!--\s*IMG[^>]*-->/g, '')                 // 이미지 힌트 주석 제거
           .replace(/<!--\s*LSI_KEYWORDS[^>]*-->/g, '')        // LSI 키워드 주석 제거
           .replace(/<!--\s*SOCIAL_COPY[^>]*-->/g, '')         // 소셜 카피 주석 제거
@@ -239,7 +249,7 @@ OUTPUT: 코드블록 없이 HTML만 출력
           claude_tokens:    message.usage.input_tokens + message.usage.output_tokens,
           content:          finalContent,
           meta_description: metaMatch?.[1] || null,
-          prompt_used:      JSON.stringify({ id: seoTemplate.id, name: seoTemplate.name }),
+          prompt_used:      JSON.stringify({ id: seoTemplate.id, name: seoTemplate.name, imageCaptions }),
           keyword_id:       randomKw.id,
         })
 
