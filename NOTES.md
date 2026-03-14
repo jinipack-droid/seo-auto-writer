@@ -1,5 +1,7 @@
 # SEO Auto Writer - 작업 내역 (NOTES.md)
 
+> 🙋 **호칭**: 이 프로젝트의 오너는 **대표님**입니다. 항상 "대표님"으로 호칭할 것.
+
 > ⚠️ 이 파일은 AI 작업 시 **가장 먼저 읽어야** 할 파일입니다.
 > 새 대화 시작 시 반드시 이 파일을 확인하고 작업하세요.
 > 파일 전체 재작성(Overwrite) 금지 — 반드시 **부분 수정(multi_replace / replace_file_content)** 사용!
@@ -82,6 +84,11 @@ image-server.mjs          - Canvas 기반 이미지 생성 서버 (70+ 템플릿
 
 ---
 
+## 🔧 Git 설정 정보
+- `git config --global user.name "대표님"`
+- `git config --global user.email "admin@seoautowriter.com"`
+- 초기 커밋 완료: 2026-03-14
+
 ## 🔧 서버 실행 방법
 
 ```powershell
@@ -108,4 +115,4 @@ Get-Process -Id (netstat -ano | findstr ":3000" | Where-Object { $_ -match "LIST
 
 ---
 
-*마지막 업데이트: 2026-03-14*
+*마지막 업데이트: 2026-03-14 (Git 초기화 완료, 대표님 호칭 등록)*
