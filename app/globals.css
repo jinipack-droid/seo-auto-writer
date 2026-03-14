@@ -1,0 +1,199 @@
+@import "tailwindcss";
+
+:root {
+  --bg-base: #0d0d0d;
+  --bg-surface: #161616;
+  --bg-card: #1c1c1c;
+  --bg-hover: #222222;
+  --bg-input: #252525;
+  --border: #2a2a2a;
+  --border-light: #333333;
+
+  --blue: #1E6AFF;
+  --blue-dim: rgba(30, 106, 255, 0.12);
+  --blue-hover: #3d7fff;
+  --blue-dark: #1555cc;
+
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
+  --text-muted: #555555;
+
+  --red: #ff4444;
+  --yellow: #ffb800;
+  --green: #00c471;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--blue); }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 8px 11px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+.input:focus { border-color: var(--blue); }
+.input::placeholder { color: var(--text-muted); }
+select.input {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23555' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  padding-right: 32px;
+}
+select.input option { background: #1c1c1c; }
+
+/* 메인 블루 버튼 */
+.btn-primary {
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn-primary:hover { background: var(--blue-hover); }
+.btn-primary:active { background: var(--blue-dark); transform: scale(0.99); }
+.btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.btn-ghost:hover { border-color: var(--blue); color: var(--blue); }
+
+.label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-blue  { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(30,106,255,0.3); }
+.badge-green { background: rgba(0,196,113,0.12); color: var(--green); border: 1px solid rgba(0,196,113,0.3); }
+.badge-gray  { background: #252525; color: var(--text-muted); }
+.badge-red   { background: rgba(255,68,68,0.12); color: var(--red); border: 1px solid rgba(255,68,68,0.3); }
+.badge-yellow{ background: rgba(255,184,0,0.12); color: var(--yellow); border: 1px solid rgba(255,184,0,0.3); }
+
+hr { border: none; border-top: 1px solid var(--border); }
+
+input[type="checkbox"] { accent-color: var(--blue); width: 14px; height: 14px; cursor: pointer; }
+
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: background 0.15s;
+}
+.toggle-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes spin   { to { transform: rotate(360deg); } }
+@keyframes blink  { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes countUp { from { opacity:0; transform:scale(0.85); } to { opacity:1; transform:scale(1); } }
+
+.fade-up { animation: fadeUp 0.25s ease-out; }
+.count-up { animation: countUp 0.4s cubic-bezier(.34,1.56,.64,1); }
+
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.dot-blue   { background: var(--blue);   box-shadow: 0 0 6px var(--blue); }
+.dot-green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+.dot-gray   { background: #444; }
+.dot-yellow { background: var(--yellow); animation: blink 1.2s infinite; }
+.dot-red    { background: var(--red); }
+
+.sh { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+
+/* 현황판 숫자 카드 */
+.stat-card {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.stat-num   { font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 2px; }
+.stat-label { font-size: 11px; color: var(--text-muted); }
+
+.result-box {
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 14px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  min-height: 150px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+  overflow-y: auto;
+}
