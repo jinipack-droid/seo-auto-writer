@@ -60,6 +60,7 @@ export default function PersonasPage() {
   const [testSiteId,  setTestSiteId]  = useState('')
   const [testLoading, setTestLoading] = useState(false)
   const [testResult,  setTestResult]  = useState<{ ok: boolean; msg: string } | null>(null)
+  const [testImageMode, setTestImageMode] = useState<'card' | 'photo' | 'both'>('card')
 
   // ── 미리보기 팝업 ──
   const [preview,        setPreview]        = useState<{ title: string; content: string; logId: string | null } | null>(null)
@@ -145,10 +146,13 @@ export default function PersonasPage() {
     // 이미지 설정 읽기 (기본값: 이미지 생성 ON)
     let generateImage = true; let imageCount = 'random'; let imageCountMin = 1; let imageCountMax = 8
     try { const img = localStorage.getItem('image_settings'); if (img) { const s = JSON.parse(img); generateImage = s.generateImage ?? true; imageCount = s.imageCount || 'random'; imageCountMin = s.imageCountMin || 1; imageCountMax = s.imageCountMax || 8 } } catch {}
+    // SEO 기본값 읽기
+    let seoDefaults = {}
+    try { const sd = localStorage.getItem('seo_defaults'); if (sd) seoDefaults = JSON.parse(sd) } catch {}
     try {
       const r = await fetch('/api/generate', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ keyword: genKw, language: popup.language, personaCode: popup.code, siteIds: [genSiteId], sitePersonas: { [genSiteId]: popup.code }, contentType:'informational', scheduleType:'immediate', publishNow: true, generateImage, imageCount, imageCountMin, imageCountMax }),
+        body: JSON.stringify({ keyword: genKw, language: popup.language, personaCode: popup.code, siteIds: [genSiteId], sitePersonas: { [genSiteId]: popup.code }, contentType:'informational', scheduleType:'immediate', publishNow: true, generateImage, imageCount, imageCountMin, imageCountMax, seoDefaults }),
       })
       const d = await r.json()
       if (r.ok) setGenResult({ ok: true, msg: `✅ 글 생성 & 발행 완료!${generateImage ? ' (이미지 포함)' : ''} 발행 로그에서 확인하세요.` })
@@ -164,6 +168,7 @@ export default function PersonasPage() {
     setTestKw('')
     setTestSiteId('')
     setTestResult(null)
+    setTestImageMode('card')
     // 해당 언어의 첫 번째 사이트 자동 선택
     const firstSite = sites.find(s => s.language === p.language)
     if (firstSite) setTestSiteId(firstSite.id)
@@ -176,6 +181,9 @@ export default function PersonasPage() {
     // 이미지 설정 읽기
     let imageCount = 'random'; let imageCountMin = 1; let imageCountMax = 8
     try { const img = localStorage.getItem('image_settings'); if (img) { const s = JSON.parse(img); imageCount = s.imageCount || 'random'; imageCountMin = s.imageCountMin || 1; imageCountMax = s.imageCountMax || 8 } } catch {}
+    // SEO 기본값 읽기
+    let seoDefaults = {}
+    try { const sd = localStorage.getItem('seo_defaults'); if (sd) seoDefaults = JSON.parse(sd) } catch {}
     try {
       const r = await fetch('/api/preview', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -185,7 +193,8 @@ export default function PersonasPage() {
           personaCode: testTarget.code,
           siteId: testSiteId,
           contentType: 'informational',
-          imageCount, imageCountMin, imageCountMax,
+          imageCount, imageCountMin, imageCountMax, seoDefaults,
+          imageMode: testImageMode,
         }),
       })
       const d = await r.json()
@@ -233,7 +242,7 @@ export default function PersonasPage() {
 
       {/* ══ 행별 테스트 발행 팝업 (1단계: 키워드+사이트 입력) ══ */}
       {testTarget && (
-        <div onClick={() => setTestTarget(null)} style={{
+        <div style={{
           position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:2000,
           display:'flex', alignItems:'center', justifyContent:'center',
         }}>
@@ -265,6 +274,7 @@ export default function PersonasPage() {
 
             <div style={{ fontSize:'10px', fontWeight:'700', color:'#a78bfa', textTransform:'uppercase',
               letterSpacing:'0.5px', marginBottom:'12px' }}>🧪 테스트 발행 — 1단계: 내용 입력</div>
+
 
             <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
               {/* 키워드 */}
@@ -349,7 +359,7 @@ export default function PersonasPage() {
 
       {/* ══ 미리보기 팝업 (2단계: 내용 확인 후 발행) ══ */}
       {preview && (
-        <div onClick={() => { setPreview(null); setPublishResult(null) }} style={{
+        <div style={{
           position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:2100,
           display:'flex', alignItems:'center', justifyContent:'center', padding:'20px',
         }}>
@@ -499,7 +509,7 @@ export default function PersonasPage() {
 
       {/* ══ 예약 일괄 발행 팝업 ══ */}
       {showBulk && (
-        <div onClick={() => setShowBulk(false)} style={{
+        <div style={{
           position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:2000,
           display:'flex', alignItems:'center', justifyContent:'center',
         }}>
@@ -754,7 +764,7 @@ export default function PersonasPage() {
 
       {/* ══════════ 상세 팝업 ══════════ */}
       {popup && (
-        <div onClick={() => setPopup(null)} style={{
+        <div style={{
           position:'fixed', inset:0, background:'rgba(0,0,0,0.75)',
           zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center',
         }}>

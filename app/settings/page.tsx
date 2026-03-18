@@ -9,27 +9,17 @@ interface EnvStatus {
   gemini: boolean
 }
 
-type TabId = 'api' | 'schedule' | 'seo' | 'image' | 'about'
+type TabId = 'api' | 'seo' | 'about'
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
-  { id: 'api',      icon: '🔑', label: 'API 설정' },
-  { id: 'schedule', icon: '⏰', label: '자동화 스케줄' },
-  { id: 'seo',      icon: '📈', label: 'SEO 기본값' },
-  { id: 'image',    icon: '🖼️',  label: '이미지 설정' },
-  { id: 'about',    icon: 'ℹ️',  label: '시스템 정보' },
+  { id: 'api',   icon: '🔑', label: 'API 설정' },
+  { id: 'seo',   icon: '📈', label: 'SEO 기본값' },
+  { id: 'about', icon: 'ℹ️',  label: '시스템 정보' },
 ]
+
 
 const SEO_DEFAULTS_KEY = 'seo_defaults'
 const SCHEDULE_KEY = 'schedule_settings'
-const IMAGE_SETTINGS_KEY = 'image_settings'
-
-const DEFAULT_IMAGE = {
-  generateImage: true,          // 글 발행 시 카드 이미지 자동 생성 (개수는 1~8개 랜덤)
-  imageStyle: 'card-wide',      // card-wide(1200×630) · card-square(1080×1080)
-  showSubtitle: true,           // 서브타이틀(키워드) 표시
-  showPoints: true,             // 핵심 포인트 3개 표시
-  showSiteName: true,           // 사이트명 표시
-}
 
 const DEFAULT_SEO = {
   minWords: 1500,
@@ -58,7 +48,6 @@ export default function SettingsPage() {
   const [envStatus, setEnvStatus] = useState<EnvStatus | null>(null)
   const [seo, setSeo] = useState({ ...DEFAULT_SEO })
   const [schedule, setSchedule] = useState({ ...DEFAULT_SCHEDULE })
-  const [imageSettings, setImageSettings] = useState({ ...DEFAULT_IMAGE })
   const [toast, setToast] = useState('')
   const [saved, setSaved] = useState(false)
 
@@ -82,8 +71,6 @@ export default function SettingsPage() {
       if (s) setSeo(JSON.parse(s))
       const sc = localStorage.getItem(SCHEDULE_KEY)
       if (sc) setSchedule(JSON.parse(sc))
-      const img = localStorage.getItem(IMAGE_SETTINGS_KEY)
-      if (img) setImageSettings(JSON.parse(img))
     } catch { /* ignore */ }
   }, [])
 
@@ -97,10 +84,6 @@ export default function SettingsPage() {
     showToast('✅ 스케줄 설정 저장됨')
   }
 
-  const saveImage = () => {
-    localStorage.setItem(IMAGE_SETTINGS_KEY, JSON.stringify(imageSettings))
-    showToast('✅ 이미지 설정 저장됨')
-  }
 
   const toggleDay = (d: string) => {
     setSchedule(p => ({
@@ -163,7 +146,6 @@ export default function SettingsPage() {
                   {[
                     { label: 'Supabase (PostgreSQL)', ok: envStatus?.supabase, key: 'NEXT_PUBLIC_SUPABASE_URL' },
                     { label: 'Claude API (Anthropic)', ok: envStatus?.anthropic, key: 'ANTHROPIC_API_KEY' },
-                    { label: 'Gemini API (Google)', ok: envStatus?.gemini, key: 'GEMINI_API_KEY' },
                   ].map(item => (
                     <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-input)', borderRadius: 6 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -195,7 +177,6 @@ export default function SettingsPage() {
                   <div>SUPABASE_SERVICE_ROLE_KEY=<span style={{ color: 'var(--yellow)' }}>eyJ...</span></div>
                   <div style={{ marginTop: 6 }}><span style={{ color: 'var(--text-muted)' }}># AI</span></div>
                   <div>ANTHROPIC_API_KEY=<span style={{ color: 'var(--yellow)' }}>sk-ant-...</span></div>
-                  <div>GEMINI_API_KEY=<span style={{ color: 'var(--yellow)' }}>AIza...</span></div>
                 </div>
               </div>
 
@@ -208,105 +189,6 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ─── 자동화 스케줄 탭 ─── */}
-          {tab === 'schedule' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-              <div className="card">
-                <div className="sh" style={{ marginBottom: 14 }}>자동 발행 스케줄</div>
-
-                {/* 활성화 토글 */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, padding: '12px 14px', background: 'var(--bg-input)', borderRadius: 8, border: schedule.enabled ? '1px solid rgba(0,196,113,0.3)' : '1px solid var(--border)' }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>자동 발행 활성화</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Cron job 기반 예약 글 자동 발행</div>
-                  </div>
-                  <div onClick={() => setSchedule(p => ({ ...p, enabled: !p.enabled }))}
-                    style={{ width: 44, height: 24, borderRadius: 12, background: schedule.enabled ? 'var(--green)' : '#333', position: 'relative', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0 }}>
-                    <div style={{ position: 'absolute', top: 3, left: schedule.enabled ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, opacity: schedule.enabled ? 1 : 0.45, pointerEvents: schedule.enabled ? 'auto' : 'none' }}>
-                  {/* 일일 발행 한도 */}
-                  <div>
-                    <label className="label">일일 최대 발행 수 — {schedule.dailyLimit}개/일</label>
-                    <input type="range" min="1" max="20" step="1" value={schedule.dailyLimit}
-                      onChange={e => setSchedule(p => ({ ...p, dailyLimit: Number(e.target.value) }))}
-                      style={{ width: '100%', accentColor: 'var(--blue)', marginBottom: 4 }} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)' }}>
-                      <span>1개</span><span>10개</span><span>20개</span>
-                    </div>
-                  </div>
-
-                  {/* 발행 시간대 */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div>
-                      <label className="label">발행 시작 시각</label>
-                      <select className="input" value={schedule.startHour} onChange={e => setSchedule(p => ({ ...p, startHour: Number(e.target.value) }))}>
-                        {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2,'0')}:00</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="label">발행 종료 시각</label>
-                      <select className="input" value={schedule.endHour} onChange={e => setSchedule(p => ({ ...p, endHour: Number(e.target.value) }))}>
-                        {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2,'0')}:00</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* 랜덤 딜레이 */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-input)', borderRadius: 6 }}>
-                    <div>
-                      <div style={{ fontSize: 13 }}>±{schedule.delayMinutes}분 랜덤 딜레이</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>자연스러운 발행 패턴으로 스팸 감지 회피</div>
-                    </div>
-                    <div onClick={() => setSchedule(p => ({ ...p, randomDelay: !p.randomDelay }))}
-                      style={{ width: 36, height: 20, borderRadius: 10, background: schedule.randomDelay ? 'var(--blue)' : '#333', position: 'relative', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0 }}>
-                      <div style={{ position: 'absolute', top: 2, left: schedule.randomDelay ? 16 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
-                    </div>
-                  </div>
-
-                  {/* 발행 요일 */}
-                  <div>
-                    <label className="label">발행 요일</label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {DAYS.map(d => (
-                        <button key={d.id} onClick={() => toggleDay(d.id)}
-                          style={{ flex: 1, padding: '7px 0', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'inherit', border: schedule.runDays.includes(d.id) ? '1px solid var(--blue)' : '1px solid var(--border)', background: schedule.runDays.includes(d.id) ? 'var(--blue-dim)' : 'var(--bg-input)', color: schedule.runDays.includes(d.id) ? 'var(--blue)' : 'var(--text-muted)' }}>
-                          {d.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* 타임존 */}
-                  <div>
-                    <label className="label">타임존</label>
-                    <select className="input" value={schedule.timezone} onChange={e => setSchedule(p => ({ ...p, timezone: e.target.value }))}>
-                      <option value="Asia/Seoul">Asia/Seoul (KST +09:00)</option>
-                      <option value="Asia/Tokyo">Asia/Tokyo (JST +09:00)</option>
-                      <option value="America/New_York">America/New_York (EST -05:00)</option>
-                      <option value="America/Los_Angeles">America/Los_Angeles (PST -08:00)</option>
-                      <option value="Europe/London">Europe/London (GMT ±00:00)</option>
-                      <option value="UTC">UTC</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card" style={{ background: 'rgba(255,184,0,0.05)', borderColor: 'rgba(255,184,0,0.2)' }}>
-                <div style={{ fontSize: 12, color: 'var(--yellow)', fontWeight: 600, marginBottom: 6 }}>⚙️ Cron Job 설정 필요</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
-                  자동 실행을 위해 Vercel Cron 또는 외부 스케줄러에서 아래 엔드포인트를 호출하세요:<br />
-                  <code style={{ background: 'var(--bg-input)', padding: '2px 6px', borderRadius: 3 }}>POST /api/cron/publish</code>
-                </div>
-              </div>
-
-              <button className="btn-primary" style={{ width: 140 }} onClick={saveSchedule}>💾 저장</button>
-            </div>
-          )}
-
           {/* ─── SEO 기본값 탭 ─── */}
           {tab === 'seo' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -315,14 +197,12 @@ export default function SettingsPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
                   {/* 글자 수 범위 */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div>
-                      <label className="label">최소 글자 수</label>
-                      <input className="input" type="number" min="500" max="5000" step="100" value={seo.minWords} onChange={e => setSeo(p => ({ ...p, minWords: Number(e.target.value) }))} />
-                    </div>
-                    <div>
-                      <label className="label">최대 글자 수</label>
-                      <input className="input" type="number" min="500" max="5000" step="100" value={seo.maxWords} onChange={e => setSeo(p => ({ ...p, maxWords: Number(e.target.value) }))} />
+                  <div>
+                    <label className="label">글자 수 범위 (랜덤 생성)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <input className="input" type="number" min="500" max="5000" step="100" value={seo.minWords} onChange={e => setSeo(p => ({ ...p, minWords: Number(e.target.value) }))} style={{ flex: 1 }} />
+                      <span style={{ color: 'var(--text-muted)', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>~</span>
+                      <input className="input" type="number" min="500" max="5000" step="100" value={seo.maxWords} onChange={e => setSeo(p => ({ ...p, maxWords: Number(e.target.value) }))} style={{ flex: 1 }} />
                     </div>
                   </div>
 
@@ -338,26 +218,6 @@ export default function SettingsPage() {
                     </select>
                   </div>
 
-                  {/* 기본 언어 */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div>
-                      <label className="label">기본 언어</label>
-                      <select className="input" value={seo.defaultLang} onChange={e => setSeo(p => ({ ...p, defaultLang: e.target.value }))}>
-                        <option value="en">English</option>
-                        <option value="ko">한국어</option>
-                        <option value="ja">日本語</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="label">기본 콘텐츠 타입</label>
-                      <select className="input" value={seo.defaultContentType} onChange={e => setSeo(p => ({ ...p, defaultContentType: e.target.value }))}>
-                        <option value="informational">정보성</option>
-                        <option value="comparison">비교형</option>
-                        <option value="howto">How-to</option>
-                        <option value="listicle">리스트형</option>
-                      </select>
-                    </div>
-                  </div>
 
                   <hr />
                   <div className="sh">고정 SEO 옵션 (항상 포함)</div>
@@ -383,141 +243,6 @@ export default function SettingsPage() {
                 </div>
               </div>
               <button className="btn-primary" style={{ width: 140 }} onClick={saveSeo}>💾 저장</button>
-            </div>
-          )}
-
-
-          {/* ─── 이미지 설정 탭 ─── */}
-          {tab === 'image' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-              {/* 이미지 자동 생성 ON/OFF */}
-              <div className="card">
-                <div className="sh" style={{ marginBottom: 16 }}>글 발행 시 이미지 자동 생성</div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '14px 18px', background: imageSettings.generateImage ? 'rgba(30,106,255,0.08)' : '#111',
-                  border: `1px solid ${imageSettings.generateImage ? 'rgba(30,106,255,0.3)' : 'var(--border)'}`,
-                  borderRadius: 10, cursor: 'pointer', transition: 'all 0.2s',
-                }} onClick={() => setImageSettings(p => ({ ...p, generateImage: !p.generateImage }))}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: imageSettings.generateImage ? '#fff' : '#666', marginBottom: 4 }}>
-                      🖼️ 카드 이미지 자동 생성
-                    </div>
-                    <div style={{ fontSize: 11, color: '#555' }}>
-                      글 발행 시 {1200}×630 카드 썸네일을 자동 생성하여 대표 이미지로 설정합니다
-                    </div>
-                  </div>
-                  <div style={{
-                    width: 44, height: 24, borderRadius: 12,
-                    background: imageSettings.generateImage ? '#1E6AFF' : '#2a2a2a',
-                    position: 'relative', transition: 'background 0.2s', flexShrink: 0,
-                  }}>
-                    <div style={{
-                      position: 'absolute', top: 2, left: imageSettings.generateImage ? 22 : 2,
-                      width: 20, height: 20, borderRadius: '50%', background: '#fff',
-                      transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                    }} />
-                  </div>
-                </div>
-              </div>
-
-
-              {/* 이미지 스타일 선택 */}
-              {imageSettings.generateImage && (
-
-                <div className="card">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                    <div className="sh">이미지 스타일</div>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px',
-                      background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)',
-                      borderRadius: 20, fontSize: 11, color: '#a78bfa', fontWeight: 700,
-                    }}>
-                      🎲 글당 이미지 수: <span style={{ color: '#c4b5fd' }}>1~8개 랜덤</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-                    {[
-                      { id: 'card-wide', label: '와이드 카드', size: '1200 × 630', desc: 'SNS / 블로그 썸네일 최적', emoji: '🖼️' },
-                      { id: 'card-square', label: '스퀘어 카드', size: '1080 × 1080', desc: '인스타그램 최적화', emoji: '⬛' },
-                    ].map(style => (
-                      <div key={style.id}
-                        onClick={() => setImageSettings(p => ({ ...p, imageStyle: style.id }))}
-                        style={{
-                          padding: 14, borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s',
-                          background: imageSettings.imageStyle === style.id ? 'rgba(30,106,255,0.12)' : '#111',
-                          border: `2px solid ${imageSettings.imageStyle === style.id ? '#1E6AFF' : 'var(--border)'}`,
-                        }}>
-                        <div style={{ fontSize: 22, marginBottom: 6 }}>{style.emoji}</div>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: '#fff', marginBottom: 2 }}>{style.label}</div>
-                        <div style={{ fontSize: 11, color: '#1E6AFF', marginBottom: 4 }}>{style.size}</div>
-                        <div style={{ fontSize: 10, color: '#555' }}>{style.desc}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* 표시 옵션 */}
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10 }}>표시 옵션</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {[
-                      { key: 'showSubtitle', label: '서브타이틀 (키워드 텍스트)' },
-                      { key: 'showPoints', label: '핵심 포인트 (카테고리 · 발행일 · 사이트명)' },
-                      { key: 'showSiteName', label: '하단 사이트명 표시' },
-                    ].map(opt => (
-                      <label key={opt.key} style={{
-                        display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-                        padding: '8px 12px', borderRadius: 6, background: '#111', border: '1px solid var(--border)',
-                      }}>
-                        <input type="checkbox"
-                          checked={imageSettings[opt.key as keyof typeof imageSettings] as boolean}
-                          onChange={e => setImageSettings(p => ({ ...p, [opt.key]: e.target.checked }))}
-                          style={{ accentColor: '#1E6AFF', width: 14, height: 14 }} />
-                        <span style={{ fontSize: 12, color: '#aaa' }}>{opt.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 카드 미리보기 */}
-              {imageSettings.generateImage && (
-                <div className="card">
-                  <div className="sh" style={{ marginBottom: 12 }}>카드 스타일 미리보기</div>
-                  <div style={{
-                    background: 'linear-gradient(135deg, #0D1B2A, #1B3A4B)',
-                    borderRadius: 10, padding: '20px 24px', position: 'relative', overflow: 'hidden',
-                    border: '1px solid rgba(79,195,247,0.2)',
-                    aspectRatio: imageSettings.imageStyle === 'card-wide' ? '1200/630' : '1/1',
-                    maxHeight: 220,
-                    display: 'flex', alignItems: 'center', gap: 20,
-                  }}>
-                    {/* 왼쪽 원형 장식 */}
-                    <div style={{ flexShrink: 0, width: 70, height: 70, borderRadius: '50%',
-                      background: 'rgba(79,195,247,0.15)', border: '2px solid rgba(79,195,247,0.3)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>
-                      ✚
-                    </div>
-                    {/* 오른쪽 텍스트 */}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 10, background: '#1976D2', color: '#fff', padding: '2px 8px', borderRadius: 4, display: 'inline-block', marginBottom: 8 }}>SKIN-CARE</div>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', lineHeight: 1.3, marginBottom: 6 }}>글 제목이 여기에 표시됩니다</div>
-                      {imageSettings.showSubtitle && <div style={{ fontSize: 11, color: 'rgba(79,195,247,0.8)', marginBottom: 8 }}>키워드 텍스트</div>}
-                      {imageSettings.showPoints && (
-                        <div style={{ display: 'flex', gap: 16, fontSize: 10, color: '#888' }}>
-                          <span>카테고리</span><span>발행일</span><span>사이트명</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 11, color: '#444', marginTop: 8, textAlign: 'center' }}>
-                    실제 이미지는 카테고리별 색상 테마가 자동 적용됩니다
-                  </div>
-                </div>
-              )}
-
-              <button className="btn-primary" style={{ width: 140 }} onClick={saveImage}>💾 저장</button>
             </div>
           )}
 

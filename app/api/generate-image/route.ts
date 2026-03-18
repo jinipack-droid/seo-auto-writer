@@ -1,24 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-/**
- * 이미지 서버 HTTP 호출 (localhost:3001)
- * @napi-rs/canvas native 모듈을 Next.js에서 직접 실행 불가 → 별도 image-server.mjs로 분리
- */
-async function generateCardImageViaServer(data: Record<string, unknown>): Promise<Buffer> {
-  const res = await fetch('http://localhost:3002/image', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-    signal: AbortSignal.timeout(120_000),
-  })
-  if (!res.ok) throw new Error(`image-server 응답 오류: ${res.status} ${await res.text()}`)
-  const arrayBuffer = await res.arrayBuffer()
-  return Buffer.from(arrayBuffer)
-}
+import { generateCardImage } from '@/lib/image/satori-generator'
 
 /**
  * POST /api/generate-image
- * 설정 페이지 미리보기, 외부 호출 등에서 카드 이미지 직접 생성
+ * 설정 페이지 미리보기, 외부 호출 등에서 카드 이미지 직접 생성 (Satori)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -28,7 +13,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'title, category, language 필수' }, { status: 400 })
     }
 
-    const png = await generateCardImageViaServer(body)
+    const png = await generateCardImage(body)
 
     return new NextResponse(new Uint8Array(png), {
       status: 200,
@@ -46,59 +31,43 @@ export async function POST(req: NextRequest) {
 
 /**
  * GET /api/generate-image?lang=ko&cat=skin-care
- * 테스트용 샘플 이미지 생성
+ * 테스트용 샘플 이미지 생성 (Satori)
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const lang = searchParams.get('lang') || 'ko'
   const cat  = searchParams.get('cat') || 'skin-care'
+  const layoutStr = searchParams.get('layout')
+  const layout = layoutStr ? parseInt(layoutStr) % 20 : Math.floor(Math.random() * 20)
 
   const samples: Record<string, Record<string, unknown>> = {
     ko: {
-      title: '보톡스 시술 완벽 가이드',
-      subtitle: '효과·지속기간·비용 총정리 2025',
-      category: cat,
-      language: 'ko',
-      points: [
-        { label: '⏱ 지속기간', value: '4~6개월 평균' },
-        { label: '⏰ 시술시간', value: '15~30분 이내' },
-        { label: '💰 평균비용', value: '10~30만원대' },
-      ],
+      title: '비타민C 효능 완전 가이드',
+      captions: ['미백 효과', '항산화 작용', '콜라겐 생성', '면역력 강화'],
+      category: cat, language: 'ko', layout, variant: Math.floor(Math.random() * 5),
     },
     en: {
-      title: 'NAD+ Therapy Complete Guide',
-      subtitle: 'Cellular Rejuvenation & Longevity Science 2025',
-      category: cat,
-      language: 'en',
-      points: [
-        { label: '⚡ Energy Boost', value: 'Up to 60% increase' },
-        { label: '💉 Delivery Method', value: 'IV drip or oral supplement' },
-        { label: '🧬 Target', value: 'Mitochondrial health' },
-      ],
+      title: 'Vitamin C Complete Guide',
+      captions: ['Brightening', 'Antioxidant', 'Collagen Boost', 'Immunity'],
+      category: cat, language: 'en', layout, variant: Math.floor(Math.random() * 5),
     },
     ja: {
-      title: 'インプラント治療 完全ガイド',
-      subtitle: '費用・期間・注意点を徹底解説 2025',
-      category: cat,
-      language: 'ja',
-      points: [
-        { label: '🦷 治療期間', value: '3〜6ヶ月' },
-        { label: '💴 費用相場', value: '30〜50万円' },
-        { label: '✅ 成功率', value: '約95%以上' },
-      ],
+      title: 'ビタミンC完全ガイド',
+      captions: ['美白効果', '抗酸化作用', 'コラーゲン生成', '免疫力UP'],
+      category: cat, language: 'ja', layout, variant: Math.floor(Math.random() * 5),
     },
   }
 
   try {
     const data = samples[lang] || samples.ko
-    const png = await generateCardImageViaServer(data)
+    const png = await generateCardImage(data as unknown as Parameters<typeof generateCardImage>[0])
 
     return new NextResponse(new Uint8Array(png), {
       status: 200,
-      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' },
+      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'X-Layout': String(layout) },
     })
   } catch (e) {
     console.error('[generate-image GET]', e)
-    return NextResponse.json({ error: 'image-server.mjs가 실행 중인지 확인하세요 (port 3001)' }, { status: 500 })
+    return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }

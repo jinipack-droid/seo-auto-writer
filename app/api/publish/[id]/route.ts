@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenAI } from '@google/genai'
 import { createServiceClient } from '@/lib/supabase/server'
+import { generateCardImage } from '@/lib/image/satori-generator'
 import {
   publishToWordPress,
   extractMetaFromContent,
@@ -9,52 +9,6 @@ import {
   type WordPressSite,
 } from '@/lib/wordpress/client'
 
-const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' })
-
-/** 기사 내용에서 이미지용 영문 프롬프트 생성 */
-function buildImagePrompt(title: string, category: string, h2Headings: string[], index: number): string {
-  const catMap: Record<string, string> = {
-    'health': 'health and wellness', 'skin-care': 'skincare and beauty',
-    'nutrition': 'nutrition and diet', 'fitness': 'fitness and exercise',
-    'medical': 'medical and healthcare', 'beauty': 'beauty and cosmetics',
-    'diet': 'diet and weight loss', 'supplement': 'supplements and vitamins',
-    'mental-health': 'mental health and mindfulness', 'lifestyle': 'healthy lifestyle',
-  }
-  const catEn = catMap[category] || category.replace(/-/g, ' ')
-  const themes = [
-    'professional studio photo, clean modern style',
-    'lifestyle photography, warm natural lighting',
-    'flat lay composition, minimalist aesthetic',
-    'close-up detail shot, high contrast',
-    'editorial photography, vibrant colors',
-  ]
-  const theme = themes[index % themes.length]
-  const sectionHint = h2Headings[index] ? `, specifically about "${h2Headings[index].slice(0, 40)}"` : ''
-  return `High-quality, professional photograph for a ${catEn} blog article titled "${title.slice(0, 60)}"${sectionHint}. The image should be visually compelling and relevant to the topic. Style: ${theme}. No text, no watermarks, no logos. Photorealistic, magazine quality, 1:1 aspect ratio.`
-}
-
-/** Gemini AI 이미지 생성 */
-async function generateImageViaGemini(prompt: string): Promise<Buffer | null> {
-  try {
-    const response = await genai.models.generateContent({
-      model: 'gemini-2.0-flash-preview-image-generation',
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        responseModalities: ['IMAGE'],
-        numberOfImages: 1,
-      } as Record<string, unknown>,
-    })
-    const parts = response.candidates?.[0]?.content?.parts
-    if (!parts) return null
-    for (const part of parts) {
-      if (part.inlineData?.data) return Buffer.from(part.inlineData.data, 'base64')
-    }
-    return null
-  } catch (err) {
-    console.warn('[Gemini Image] 생성 실패:', err)
-    return null
-  }
-}
 
 /**
  * POST /api/publish/[id]
@@ -115,47 +69,49 @@ export async function POST(
     if (catId) wpCategoryIds = [catId]
   }
 
-  // ── Step 1: Gemini AI 이미지 생성 & 업로드 ──
+  // ── Step 1: 카드뉴스 이미지 생성 & 업로드 ──
   const mediaItems: Array<{ id: number; url: string }> = []
-  const geminiKey = process.env.GEMINI_API_KEY
-  if (geminiKey?.startsWith('AIza')) {
-    try {
-      const imgCategory = (log.category || site.category || 'health') as string
-      const numImages = 1 + Math.floor(Math.random() * 5) // 1~5개 랜덤
+  try {
+    const imgCategory = (log.category || site.category || 'health') as string
+    const imgLanguage = (site.language || 'ko') as string
+    const numImages = 1 + Math.floor(Math.random() * 4) // 1~4개 랜덤
 
-      const h2Headings = [...cleanContent.matchAll(/<h2[^>]*>(.*?)<\/h2>/gi)]
-        .map(m => m[1].replace(/<[^>]+>/g, '').trim())
-        .filter(s => s.length > 2)
+    const h2Headings = [...cleanContent.matchAll(/<h2[^>]*>(.*?)<\/h2>/gi)]
+      .map(m => m[1].replace(/<[^>]+>/g, '').trim())
+      .filter(s => s.length > 2)
 
-      console.log(`[Publish] 🎨 Gemini 이미지 ${numImages}개 생성: "${finalTitle}"`)
-
-      for (let i = 0; i < numImages; i++) {
-        try {
-          const prompt = buildImagePrompt(finalTitle, imgCategory, h2Headings, i)
-          console.log(`[Publish] 🖼 이미지 ${i + 1}/${numImages}: ${prompt.slice(0, 100)}...`)
-
-          const imgBuffer = await generateImageViaGemini(prompt)
-          if (!imgBuffer) {
-            console.warn(`[Publish] ⚠️ 이미지 ${i + 1}/${numImages} 생성 실패 (null)`)
-            continue
-          }
-          const slug = finalTitle.replace(/[^a-zA-Z0-9가-힣]/g, '-').slice(0, 40)
-          const filename = `ai-${slug}-${i + 1}-${Date.now()}.png`
-          const media = await uploadImageToWordPress(site, imgBuffer, filename, `${finalTitle} 이미지 ${i + 1}`)
-          if (media) {
-            mediaItems.push(media)
-            console.log(`[Publish] ✅ 이미지 ${i + 1}/${numImages} 업로드 완료 (id: ${media.id})`)
-          }
-          if (i < numImages - 1) await new Promise(r => setTimeout(r, 3000))
-        } catch (e) {
-          console.warn(`[Publish] ⚠️ 이미지 ${i + 1} 오류:`, e)
-        }
-      }
-    } catch (imgErr) {
-      console.warn('[Publish] 이미지 생성 실패, 이미지 없이 발행:', imgErr)
+    // Fisher-Yates 셔플 레이아웃
+    const layoutPool = [0,1,2,3,4,5,6,7,8,9,10]
+    for (let k = layoutPool.length - 1; k > 0; k--) {
+      const j = Math.floor(Math.random() * (k + 1));[layoutPool[k], layoutPool[j]] = [layoutPool[j], layoutPool[k]]
     }
-  } else {
-    console.warn('[Publish] ⚠️ GEMINI_API_KEY 미설정 — 이미지 없이 발행')
+
+    console.log(`[Publish] 🎨 카드뉴스 ${numImages}개 생성: "${finalTitle}"`)
+    for (let i = 0; i < numImages; i++) {
+      try {
+        const imgTitle = h2Headings[i] ?? finalTitle
+        const imgCaptions = h2Headings.filter((_, idx) => idx !== i).slice(0, 5)
+        if (imgCaptions.length === 0) imgCaptions.push(log.keyword_text || finalTitle)
+
+        const imgBuffer = await generateCardImage({
+          title: imgTitle, captions: imgCaptions,
+          category: imgCategory, language: imgLanguage,
+          layout: layoutPool[i % layoutPool.length], variant: i,
+          siteName: site.name,
+        })
+        if (!imgBuffer) { console.warn(`[Publish] ⚠️ 이미지 ${i+1} 생성 실패`); continue }
+        const slug = finalTitle.replace(/[^a-zA-Z0-9가-힣]/g, '-').slice(0, 40)
+        const filename = `card-${slug}-${i+1}-${Date.now()}.png`
+        const altText = `${imgTitle} - ${log.keyword_text || finalTitle}`
+        const media = await uploadImageToWordPress(site, imgBuffer, filename, altText)
+        if (media) {
+          mediaItems.push(media)
+          console.log(`[Publish] ✅ 이미지 ${i+1}/${numImages} 업로드 완료 (id: ${media.id})`)
+        }
+      } catch (e) { console.warn(`[Publish] ⚠️ 이미지 ${i+1} 오류:`, e) }
+    }
+  } catch (imgErr) {
+    console.warn('[Publish] 이미지 생성 실패, 이미지 없이 발행:', imgErr)
   }
 
   // ── Step 2: 나머지 이미지를 H2 뒤에 본문에 삽입 ──

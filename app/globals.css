@@ -194,6 +194,6 @@ input[type="checkbox"] { accent-color: var(--blue); width: 14px; height: 14px; c
   min-height: 150px;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 480px;
+  max-height: 90vh;
   overflow-y: auto;
 }

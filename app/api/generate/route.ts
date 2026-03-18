@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase/server'
 import { pickPromptByContentType, getCategoryInstruction } from '@/lib/prompts/seo-prompts'
+import { generateCardImage } from '@/lib/image/satori-generator'
 import {
   publishToWordPress,
   extractMetaFromContent,
@@ -14,29 +15,6 @@ import {
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
-/**
- * HTML/CSS+Puppeteer 이미지 서버 호출 (localhost:3001)
- * captions [] 배열 + layout 0~9 로 완전히 다른 구조 렌더링
- */
-async function generateCardImageViaServer(data: {
-  title: string
-  captions: string[]
-  category: string
-  language: string
-  layout: number      // 0~9: 10가지 완전 다른 HTML/CSS 레이아웃
-  variant?: number
-  siteName?: string
-}): Promise<Buffer> {
-  const res = await fetch('http://localhost:3001/image', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-    signal: AbortSignal.timeout(30_000),  // 30초 (Puppeteer)
-  })
-  if (!res.ok) throw new Error(`html-image-server 오류: ${res.status} ${await res.text()}`)
-  const arrayBuffer = await res.arrayBuffer()
-  return Buffer.from(arrayBuffer)
-}
 
 /**
  * [Step 2] Claude Haiku로 이미지 캡션 N개 별도 생성
@@ -296,6 +274,64 @@ function pickRandomSeoOptions(count = 3): Array<{ label: string; instruction: st
   return shuffled.slice(0, count)
 }
 
+interface SeoDefaults {
+  minWords?: number
+  maxWords?: number
+  keywordDensity?: string
+  includeSchema?: boolean
+  includeFaq?: boolean
+  includeDisclaimer?: boolean
+  defaultLang?: string
+  defaultContentType?: string
+}
+
+function buildDynamicSeoRequirements(seo: SeoDefaults): string {
+  const density = seo.keywordDensity ?? '1.5'
+  const schemaLine = seo.includeSchema !== false
+    ? `\n4. Schema Markup 힌트 주석 (본문 상단):\n<!-- SCHEMA: Article | FAQPage | HowTo -->`
+    : ''
+  const disclaimerLine = seo.includeDisclaimer !== false
+    ? `\n7. 의료/건강 면책 조항 (본문 맨 아래):\n<p class="disclaimer"><strong>⚠️ 면책 조항:</strong> 이 글은 정보 제공 목적으로 작성되었으며, 전문적인 의료 조언을 대체하지 않습니다. 개인 건강 상태에 따라 의사 또는 전문가와 상담하세요.</p>`
+    : ''
+
+  return `
+[고정 SEO 요구사항 - 반드시 모두 포함, WordPress REST API 업로드용 HTML]
+
+1. 메타 주석 (본문 최상단):
+<!-- META: [키워드 자연 포함, 독자 혜택 명확, 150자 이하 메타디스크립션] -->
+<!-- TITLE: [H1 제목 - 키워드+숫자+연도 조합, 50~60자] -->
+
+2. HTML 구조 (WordPress 에디터 호환):
+- <h1>: 키워드 포함, 본문에 단 1개
+- <h2>: 주요 섹션 구분, 각 소제목에 LSI 키워드 자연 포함
+- <h3>: 세부 항목
+- <p>: 2~3문장 단락 (가독성)
+- <ul>/<ol>: 목록형 정보
+- <strong>: 핵심 키워드/수치 강조 (남용 금지, 단락당 1~2개)
+- <blockquote>: 전문가 인용 또는 핵심 포인트
+
+3. 키워드 배치 규칙:
+- 주 키워드: H1, 첫 단락, 마지막 단락에 자연 포함
+- LSI 키워드 5개 이상 본문 전체에 분산 (같은 단락에 몰리지 않게)
+- 키워드 밀도 ${density}% (기계적 반복 금지 - 구글 AI 감지 회피)
+${schemaLine}
+
+5. E-E-A-T 신호 (반드시 포함):
+- 구체적 수치/연구 언급 ("2023년 연구에 따르면", "X명 대상 임상에서")
+- 전문적 표현과 일상 언어 혼합 (인간 필자처럼)
+- 개인적 관점 또는 경험 서술 어조 1~2곳
+
+6. 내부 링크 플레이스홀더:
+[INTERNAL_LINK: 관련 주제명] 형식으로 글 내 2~3곳 삽입
+${disclaimerLine}
+
+8. 자연스러운 글쓰기 패턴 (AI 감지 회피):
+- 문장 길이를 의도적으로 다양하게 (짧은 문장 + 긴 문장 혼합)
+- 구어체 표현 1~2곳 자연스럽게 삽입
+- 동일 표현 반복 금지 (유의어 활용)
+`
+}
+
 function buildPrompt(params: {
   keyword: string
   language: string
@@ -304,8 +340,10 @@ function buildPrompt(params: {
   wordCount: number
   seoPromptStructure: string
   randomSeoOptions: Array<{ label: string; instruction: string }>
+  seoDefaults?: SeoDefaults
 }): string {
-  const { keyword, language, category, wordCount, seoPromptStructure, randomSeoOptions } = params
+  const { keyword, language, category, wordCount, seoPromptStructure, randomSeoOptions, seoDefaults } = params
+  const dynamicSeoReqs = buildDynamicSeoRequirements(seoDefaults ?? {})
 
   const langInstruction =
     language === 'ko' ? '반드시 한국어로 작성하세요. 영어 키워드가 주어져도 한국어 글을 작성하세요.' :
@@ -324,7 +362,7 @@ function buildPrompt(params: {
 
 ${seoPromptStructure}
 
-${FIXED_SEO_REQUIREMENTS}
+${dynamicSeoReqs}
 
 ━━━ 이번 글에 반드시 포함할 랜덤 SEO 섹션 (아래 3가지 모두 실제 HTML로 작성) ━━━
 ${randomOptionBlocks}
@@ -338,7 +376,9 @@ OUTPUT FORMAT (코드블록 없이 HTML만 출력):
 <!-- IMG_CAPS: [캡션1]|[캡션2]|[캡션3]|[캡션4]|[캡션5]|[캡션6]|[캡션7]|[캡션8] -->
 (IMG_CAPS 형식: 각 캡션은 본문의 주요 소제목/핵심 개념을 뽑은 10자 내외 짧은 구문. 파이프(|)로 구분. 예: 수염제모 트렌드|연령별 선호도|레이저 vs 왁싱|비용 비교|부작용 주의)
 
-[<h1>으로 시작하는 전체 HTML 본문 - 위 랜덤 섹션 포함]`
+⚠️ 중요: 글은 반드시 결론 섹션(마무리/정리/요약)으로 완전히 끝나야 합니다. 내용이 중간에 잘리지 않도록 하고, 마지막에 면책 조항까지 포함하여 완결된 글을 작성하세요.
+
+[<h1>으로 시작하는 전체 HTML 본문 - 위 랜덤 섹션 포함 — 반드시 결론/마무리 단락으로 완결]`
 }
 
 export async function POST(request: NextRequest) {
@@ -355,6 +395,7 @@ export async function POST(request: NextRequest) {
       imageCount,     // '염'|'1'~'5' : 글당 생성할 이미지 수
       imageCountMin,  // 랜덤일 때 최소
       imageCountMax,  // 랜덤일 때 최대
+      seoDefaults,    // 설정 페이지 SEO 기본값 (localStorage → 클라이언트 전달)
     } = body
 
     if (!keyword?.trim()) {
@@ -422,10 +463,20 @@ export async function POST(request: NextRequest) {
       const seoPromptTemplate = pickPromptByContentType(contentType)
       const randomSeoOptions = pickRandomSeoOptions(3)
 
+      // wordCount 결정: seoDefaults.minWords ~ maxWords 범위에서 랜덤, 또는 직접 전달값
+      const effectiveWordCount = wordCount
+        || (seoDefaults?.minWords && seoDefaults?.maxWords
+            ? seoDefaults.minWords + Math.floor(Math.random() * (seoDefaults.maxWords - seoDefaults.minWords))
+            : seoDefaults?.minWords
+            ? seoDefaults.minWords
+            : 1500)
+
       const userPrompt = buildPrompt({
-        keyword, language, contentType, category, wordCount,
+        keyword, language, contentType, category,
+        wordCount: effectiveWordCount,
         seoPromptStructure: `[글쓰기 스타일: ${seoPromptTemplate.name} (${seoPromptTemplate.id})]\n${seoPromptTemplate.contentStructure}`,
         randomSeoOptions,
+        seoDefaults: seoDefaults ?? {},
       })
 
       // Claude API 호출 (페르소나 + SEO 스타일 + 카테고리 전문성 3중 조합)
@@ -436,7 +487,7 @@ export async function POST(request: NextRequest) {
 
       const message = await anthropic.messages.create({
         model: 'claude-sonnet-4-5',
-        max_tokens: 4096,
+        max_tokens: 8000,
         system: combinedSystem,
         messages: [{ role: 'user', content: userPrompt }],
       })
@@ -507,58 +558,39 @@ export async function POST(request: NextRequest) {
               }
               console.log(`📸 이미지 ${numImages}개 생성 예정 (설정: ${imageCount}, ${imageCountMin}~${imageCountMax})`)
 
-              // ── 이미지마다 다른 레이아웃+내용 (미리 cardBase 템플릿만 정의) ──
-              const today = new Date().toLocaleDateString('ko-KR')
-              const catLabel = cardCategory.replace(/-/g, ' ').toUpperCase()
-              // 이미지별로 다른 포인트 조합 (내용 다양화)
-              const POINT_SETS = [
-                [ // 0: 기본 - 카테고리/날짜/사이트
-                  { label: '카테고리', value: catLabel },
-                  { label: '발행일', value: today },
-                  { label: '사이트', value: site.name || 'SEO Writer' },
-                ],
-                [ // 1: 키워드 중심
-                  { label: '키워드', value: keyword.slice(0, 14) },
-                  { label: '언어', value: cardLang === 'ko' ? '한국어' : cardLang === 'ja' ? '日本語' : 'English' },
-                  { label: '사이트', value: site.name || 'SEO Writer' },
-                ],
-                [ // 2: SEO 포인트
-                  { label: 'SEO 최적화', value: '✓ 완료' },
-                  { label: '카테고리', value: catLabel },
-                  { label: '발행', value: today },
-                ],
-                [ // 3: 발행 정보
-                  { label: '발행일', value: today },
-                  { label: '분야', value: catLabel },
-                  { label: '출처', value: site.name || 'SEO Writer' },
-                ],
-                [ // 4: 사이트명 강조
-                  { label: '전문가 콘텐츠', value: site.name || 'SEO Writer' },
-                  { label: '카테고리', value: catLabel },
-                  { label: '업로드', value: today },
-                ],
-              ]
+              // Fisher-Yates 셔플로 레이아웃 균등 랜덤 배정
+              const layoutPool = [0,1,2,3,4,5,6,7,8,9,10]
+              for (let k = layoutPool.length - 1; k > 0; k--) {
+                const j = Math.floor(Math.random() * (k + 1));
+                [layoutPool[k], layoutPool[j]] = [layoutPool[j], layoutPool[k]]
+              }
 
               for (let i = 0; i < numImages; i++) {
                 try {
+                  // 이미지별 소제목을 메인 제목으로, 나머지 소제목을 캡션으로 사용
+                  const imgTitle = imageSubtitles[i] ?? finalTitle
+                  const imgCaptions = imageSubtitles.filter((_, idx) => idx !== i).slice(0, 5)
+                  if (imgCaptions.length === 0) imgCaptions.push(keyword)
+
                   const imgData = {
-                    title:    finalTitle,
-                    subtitle: imageSubtitles[i] ?? keyword,   // H2 소제목 순서대로
+                    title:    imgTitle,
+                    captions: imgCaptions,
                     category: cardCategory,
                     language: cardLang,
-                    layout:   Math.floor(Math.random() * 30),  // 0~29 랜덤 레이아웃
+                    layout:   layoutPool[i % layoutPool.length],
                     variant:  i,
-                    points:   POINT_SETS[i % POINT_SETS.length],
                     siteName: site.name,
                   }
-                  console.log(`🎨 이미지 ${i + 1}: layout=${imgData.layout}, variant=${imgData.variant}`)
-                  const imgBuffer = await generateCardImageViaServer(imgData)
+                  console.log(`🎨 이미지 ${i + 1}: layout=${imgData.layout}, title="${imgTitle.slice(0,15)}"`)
+                   const imgBuffer = await generateCardImage(imgData)
                   const slug      = finalTitle.replace(/[^a-zA-Z0-9가-힣]/g, '-').slice(0, 40)
                   const filename  = `card-${slug}-v${i + 1}-${Date.now()}.png`
-                  const media     = await uploadImageToWordPress(site, imgBuffer, filename, `${finalTitle} 이미지 ${i + 1}`)
+                  // alt text = 이미지별 소제목 (SEO 최적화)
+                  const altText   = `${imgTitle} - ${keyword}`
+                  const media     = await uploadImageToWordPress(site, imgBuffer, filename, altText)
                   if (media) {
                     mediaItems.push(media)
-                    console.log(`✅ 이미지 ${i + 1}/${numImages} 업로드 완료 (id: ${media.id}, url: ${media.url})`)
+                    console.log(`✅ 이미지 ${i + 1}/${numImages} 업로드 완료 (id: ${media.id})`)
                   } else {
                     console.warn(`⚠️ 이미지 ${i + 1}/${numImages} 업로드 실패 (null 반환)`)
                   }

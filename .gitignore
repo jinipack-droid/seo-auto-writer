@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ── 로컬 전용 파일 (Vercel 미사용) ───────────────────────
+templates/
+image-server.mjs
+html-image-server.mjs
+gen200.cjs
+gen_preview.cjs
+gen_layouts.cjs
+gen_templates.cjs
+fix_font_weight.cjs
+check_personas.mjs
+auto-start.vbs
+preview-gallery.html
+*.bat

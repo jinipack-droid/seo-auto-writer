@@ -9,28 +9,43 @@ export const dynamic = 'force-dynamic'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// image-server.mjs (localhost:3001) 호출 → Buffer 반환
-async function generateCardImageBuffer(data: {
+import { generateCardImage } from '@/lib/image/satori-generator'
+
+
+// 이미지별 문구 세트 파싱
+interface ImagePlan {
   title: string
   captions: string[]
-  category: string
-  language: string
-  layout: number
-  variant?: number
-  siteName?: string
-}): Promise<Buffer | null> {
-  try {
-    const res = await fetch('http://localhost:3001/image', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-      signal: AbortSignal.timeout(30_000),
+}
+
+function parseImagePlans(rawContent: string, fallbackTitle: string, fallbackCaps: string[]): ImagePlan[] {
+  const planMatch = rawContent.match(/<!--\s*IMAGE_PLANS:\s*([\s\S]*?)\s*-->/)
+  if (!planMatch) return []
+  return planMatch[1]
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map(line => {
+      const parts = line.split('|').map(s => s.trim()).filter(s => s.length > 0)
+      const title = parts[0] || fallbackTitle
+      const captions = parts.slice(1).filter(s => s.length >= 2 && !s.startsWith('['))
+      return { title, captions: captions.length > 0 ? captions : fallbackCaps }
     })
-    if (!res.ok) return null
-    return Buffer.from(await res.arrayBuffer())
-  } catch {
-    return null
+}
+
+// 레이아웃 0~10 중 중복 없이 Fisher-Yates 셔플로 균등 랜덤 배정
+function pickLayouts(count: number): number[] {
+  const pool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  // Fisher-Yates 균등 셔플 (sort 기반은 편향 발생)
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]]
   }
+  const result: number[] = []
+  for (let i = 0; i < count; i++) {
+    result.push(pool[i % pool.length])
+  }
+  return result
 }
 
 function cleanContentForPublish(content: string): string {
@@ -62,6 +77,12 @@ export async function POST(request: NextRequest) {
       imageCount = 'random',
       imageCountMin = 1,
       imageCountMax = 8,
+      seoDefaults = {} as {
+        minWords?: number; maxWords?: number;
+        keywordDensity?: string;
+        includeDisclaimer?: boolean;
+        includeSchema?: boolean;
+      },
     } = body
 
     if (!keyword?.trim()) return NextResponse.json({ error: '키워드를 입력해주세요.' }, { status: 400 })
@@ -78,7 +99,15 @@ export async function POST(request: NextRequest) {
     const systemPrompt = personaData?.system_prompt || PERSONA_PROMPTS[personaCode] || PERSONA_PROMPTS['P-01']
     const seoTemplate  = pickPromptByContentType(contentType)
     const categoryStr  = category || siteData?.category || 'health'
-    const wordCount    = 1500
+    // wordCount: seoDefaults 범위 내 랜덤, 없으면 1500
+    const minW = seoDefaults?.minWords || 1500
+    const maxW = seoDefaults?.maxWords || 2500
+    const wordCount = minW + Math.floor(Math.random() * (maxW - minW))
+    const density = seoDefaults?.keywordDensity ?? '1.5'
+    const disclaimerLine = seoDefaults?.includeDisclaimer !== false
+      ? `\n⚠️ 면책 조항을 본문 맨 아래에 반드시 포함: <p class="disclaimer"><strong>⚠️ 면책 조항:</strong> 이 글은 정보 제공 목적으로 작성되었으며, 전문적인 의료 조언을 대체하지 않습니다.</p>`
+      : ''
+    const schemaHint = seoDefaults?.includeSchema !== false ? '\n<!-- SCHEMA: Article -->' : ''
 
     // Claude로 글 생성
     const langInstruction =
@@ -91,23 +120,36 @@ export async function POST(request: NextRequest) {
 키워드: "${keyword}"
 카테고리: ${categoryStr}
 목표 글자 수: ${wordCount}자 이상
+키워드 밀도: ${density}% (기계적 반복 금지)
 
 ${seoTemplate.contentStructure}
 
 [OUTPUT FORMAT - 코드블록 없이 HTML만 출력]
 <!-- META: [150자 이하 메타디스크립션] -->
-<!-- TITLE: [H1 제목] -->
-<!-- SCHEMA: Article -->
-<!-- IMG_CAPS: [캡션1]|[캡션2]|[캡션3]|[캡션4]|[캡션5]|[캡션6]|[캡션7]|[캡션8] -->
+<!-- TITLE: [H1 제목] -->${schemaHint}
+<!-- IMAGE_PLANS:
+이미지1소제목(20자이내)|캡션A(15자이내)|캡션B(15자이내)|캡션C(15자이내)|캡션D(15자이내)|캡션E(15자이내)
+이미지2소제목(20자이내)|캡션A(15자이내)|캡션B(15자이내)|캡션C(15자이내)|캡션D(15자이내)|캡션E(15자이내)
+이미지3소제목(20자이내)|캡션A(15자이내)|캡션B(15자이내)|캡션C(15자이내)|캡션D(15자이내)|캡션E(15자이내)
+이미지4소제목(20자이내)|캡션A(15자이내)|캡션B(15자이내)|캡션C(15자이내)|캡션D(15자이내)|캡션E(15자이내)
+이미지5소제목(20자이내)|캡션A(15자이내)|캡션B(15자이내)|캡션C(15자이내)|캡션D(15자이내)|캡션E(15자이내)
+이미지6소제목(20자이내)|캡션A(15자이내)|캡션B(15자이내)|캡션C(15자이내)|캡션D(15자이내)|캡션E(15자이내)
+이미지7소제목(20자이내)|캡션A(15자이내)|캡션B(15자이내)|캡션C(15자이내)|캡션D(15자이내)|캡션E(15자이내)
+이미지8소제목(20자이내)|캡션A(15자이내)|캡션B(15자이내)|캡션C(15자이내)|캡션D(15자이내)|캡션E(15자이내)
+-->
+규칙: 각 이미지 소제목과 캡션은 본문 핵심 내용 반영, 서로 다른 주제/관점, 한국어/영어/일본어 언어에 맞게 작성.
+${disclaimerLine}
 
-[<h1>으로 시작하는 전체 HTML 본문]`
+⚠️ 중요: 글은 반드시 결론 섹션(마무리/정리/요약)으로 완전히 끝나야 합니다. 내용이 중간에 잘리지 않도록 하고, 마지막에 면책 조항까지 포함하여 완결된 글을 작성하세요.
+
+[<h1>으로 시작하는 전체 HTML 본문 — 반드시 결론/마무리 단락으로 완결]`
 
     const combinedSystem = [systemPrompt, seoTemplate.systemInstruction, getCategoryInstruction(categoryStr)]
       .filter(Boolean).join('\n\n---\n\n')
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 4096,
+      max_tokens: 8000,
       system: combinedSystem,
       messages: [{ role: 'user', content: userPrompt }],
     })
@@ -118,16 +160,11 @@ ${seoTemplate.contentStructure}
     const finalTitle = extractedTitle || keyword
     const actualWordCount = cleanedContent.replace(/<[^>]+>/g, '').replace(/\s+/g, '').length
 
-    // IMG_CAPS 파싱
-    const capMatch = rawContent.match(/<!--\s*IMG_CAPS:\s*(.*?)\s*-->/)
-    const parsedCaps = capMatch
-      ? capMatch[1].split('|').map(s => s.trim()).filter(s => s.length >= 2 && !s.startsWith('['))
-      : []
-    const h2Fallback = parsedCaps.length < 3
-      ? (cleanedContent.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || [])
-          .map(h => h.replace(/<[^>]+>/g, '').trim()).filter(t => t.length >= 4)
-      : []
-    const allCaps = [...parsedCaps, ...h2Fallback]
+    // IMAGE_PLANS 파싱 (이미지별 독립 문구 세트)
+    const h2Texts = (cleanedContent.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || [])
+      .map(h => h.replace(/<[^>]+>/g, '').trim()).filter(t => t.length >= 4)
+    const fallbackCaps = h2Texts.length > 0 ? h2Texts : [keyword]
+    const imagePlans = parseImagePlans(rawContent, finalTitle, fallbackCaps)
 
     // 이미지 개수 결정
     let numImages: number
@@ -138,29 +175,31 @@ ${seoTemplate.contentStructure}
       const max = Math.min(8, imageCountMax || 8)
       numImages = min + Math.floor(Math.random() * (max - min + 1))
     }
-    console.log(`🖼 미리보기 이미지 ${numImages}개 생성 시작`)
+    console.log(`🖼 미리보기 이미지 ${numImages}개 카드 생성 시작`)
+
+    // 레이아웃 중복 없이 랜덤 배정
+    const layouts = pickLayouts(numImages)
 
     // 이미지 생성 → base64 배열
     const base64Images: string[] = []
-    const cardCategory = (categoryStr).replace(/-/g, ' ').toUpperCase()
 
     for (let i = 0; i < numImages; i++) {
-      const cap = allCaps[i] ?? keyword
-      const caption = cap.length > 20 ? cap.slice(0, 20) + '…' : cap
-      const buf = await generateCardImageBuffer({
-        title:    finalTitle,
-        captions: [caption],
-        category: categoryStr,
-        language,
-        layout:   Math.floor(Math.random() * 30),
-        variant:  i,
-        siteName: siteData?.name,
-      })
-      if (buf) {
+      const plan = imagePlans[i]
+      const imgTitle = plan?.title ?? (h2Texts[i] ?? finalTitle)
+      const imgCaptions = plan?.captions?.length > 0 ? plan.captions : fallbackCaps.slice(0, 5)
+
+      // 카드뉴스 이미지 생성 (Satori)
+      try {
+        const buf = await generateCardImage({
+          title: imgTitle, captions: imgCaptions,
+          category: categoryStr, language,
+          layout: layouts[i], variant: i,
+          siteName: siteData?.name,
+        })
         base64Images.push(`data:image/png;base64,${buf.toString('base64')}`)
-        console.log(`✅ 이미지 ${i + 1}/${numImages} 생성 완료`)
-      } else {
-        console.warn(`⚠️ 이미지 ${i + 1}/${numImages} 생성 실패`)
+        console.log(`✅ 이미지 ${i + 1}/${numImages} 완료 (layout=${layouts[i]}, title="${imgTitle.slice(0,15)}...")`)
+      } catch (imgErr) {
+        console.warn(`⚠️ 이미지 ${i + 1}/${numImages} 생성 실패`, imgErr)
       }
     }
 
