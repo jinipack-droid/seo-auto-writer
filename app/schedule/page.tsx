@@ -17,18 +17,17 @@ interface ScheduledLog {
 const LANG_FLAGS: Record<string, string> = { en: '🇺🇸', ko: '🇰🇷', ja: '🇯🇵' }
 
 export default function SchedulePage() {
-  const [logs, setLogs]           = useState<ScheduledLog[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [checked, setChecked]     = useState<Set<string>>(new Set())
-  const [deleting, setDeleting]   = useState(false)
-  const [msg, setMsg]             = useState('')
+  const [logs, setLogs]             = useState<ScheduledLog[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [checked, setChecked]       = useState<Set<string>>(new Set())
+  const [deleting, setDeleting]     = useState(false)
+  const [msg, setMsg]               = useState('')
   const [filterDate, setFilterDate] = useState('')
   const [filterSite, setFilterSite] = useState('all')
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
-      // scheduled + pending 모두 조회 (발행 대기 중인 글 전체)
       const [r1, r2] = await Promise.all([
         fetch('/api/logs?status=scheduled&limit=500'),
         fetch('/api/logs?status=pending&limit=500'),
@@ -36,7 +35,6 @@ export default function SchedulePage() {
       const d1 = await r1.json()
       const d2 = await r2.json()
       const combined = [...(d1.logs || []), ...(d2.logs || [])]
-      // scheduled_at 기준 정렬
       combined.sort((a, b) => (a.scheduled_at || '').localeCompare(b.scheduled_at || ''))
       setLogs(combined)
     } finally {
@@ -46,25 +44,18 @@ export default function SchedulePage() {
 
   useEffect(() => { fetchLogs() }, [fetchLogs])
 
-  // 필터 적용
+  const today = new Date().toISOString().slice(0, 10)
   const sites = Array.from(new Set(logs.map(l => l.sites?.name || l.site_id).filter(Boolean)))
+  const todayLogs = logs.filter(l => (l.scheduled_at || '').startsWith(today))
+
   const filtered = logs.filter(l => {
     const dateMatch = !filterDate || (l.scheduled_at || '').startsWith(filterDate)
     const siteMatch = filterSite === 'all' || (l.sites?.name || l.site_id) === filterSite
     return dateMatch && siteMatch
   })
 
-  // 오늘 예약된 글
-  const today = new Date().toISOString().slice(0, 10)
-  const todayLogs = logs.filter(l => (l.scheduled_at || '').startsWith(today))
-
-  // 체크박스
   const toggleAll = () => {
-    if (checked.size === filtered.length) {
-      setChecked(new Set())
-    } else {
-      setChecked(new Set(filtered.map(l => l.id)))
-    }
+    setChecked(checked.size === filtered.length ? new Set() : new Set(filtered.map(l => l.id)))
   }
   const toggleOne = (id: string) => {
     const next = new Set(checked)
@@ -72,43 +63,37 @@ export default function SchedulePage() {
     setChecked(next)
   }
 
-  // 개별 삭제
   const deleteOne = async (id: string) => {
     if (!confirm('이 예약을 취소하시겠습니까?')) return
-    await fetch('/api/logs', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id }) })
+    await fetch('/api/logs', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     setLogs(prev => prev.filter(l => l.id !== id))
     setChecked(prev => { const n = new Set(prev); n.delete(id); return n })
     setMsg('✅ 삭제 완료')
   }
 
-  // 일괄 삭제
   const deleteChecked = async () => {
-    if (checked.size === 0) return
+    if (!checked.size) return
     if (!confirm(`선택한 ${checked.size}개 예약을 취소하시겠습니까?`)) return
     setDeleting(true)
-    setMsg('')
     const ids = Array.from(checked)
-    let done = 0
-    for (const id of ids) {
-      await fetch('/api/logs', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id }) })
-      done++
-      setMsg(`🗑 삭제 중... ${done}/${ids.length}`)
+    for (let i = 0; i < ids.length; i++) {
+      await fetch('/api/logs', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ids[i] }) })
+      setMsg(`🗑 삭제 중... ${i + 1}/${ids.length}`)
     }
     setLogs(prev => prev.filter(l => !checked.has(l.id)))
     setChecked(new Set())
     setDeleting(false)
-    setMsg(`✅ ${ids.length}개 예약 취소 완료`)
+    setMsg(`✅ ${ids.length}개 삭제 완료`)
   }
 
-  // 오늘 초과분 자동 정리 (3개만 남기기)
   const cleanupToday = async () => {
     const keep = 2
     const toDelete = todayLogs.slice(keep)
-    if (toDelete.length === 0) { setMsg('오늘 예약이 이미 적어요!'); return }
+    if (!toDelete.length) { setMsg('오늘 예약이 이미 적어요!'); return }
     if (!confirm(`오늘 예약 ${todayLogs.length}개 중 ${toDelete.length}개를 삭제하고 ${keep}개만 남길까요?`)) return
     setDeleting(true)
     for (const l of toDelete) {
-      await fetch('/api/logs', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: l.id }) })
+      await fetch('/api/logs', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: l.id }) })
     }
     await fetchLogs()
     setDeleting(false)
@@ -123,7 +108,7 @@ export default function SchedulePage() {
         <div>
           <div style={{ fontSize: '18px', fontWeight: '800', color: '#fff' }}>📅 예약 관리</div>
           <div style={{ fontSize: '11px', color: '#555', marginTop: '2px' }}>
-            예약됨 총 {logs.length}개 · 오늘 {todayLogs.length}개
+            발행 대기 총 {logs.length}개 · 오늘 {todayLogs.length}개 · cron 4시간마다 자동 발행
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -134,8 +119,9 @@ export default function SchedulePage() {
               ⚡ 오늘 {todayLogs.length}개 → 2개로 정리
             </button>
           )}
-          <button onClick={fetchLogs} style={{ padding: '7px 12px', borderRadius: '7px', cursor: 'pointer',
-            background: '#1c1c1c', border: '1px solid #2a2a2a', color: '#666', fontSize: '12px' }}>↺ 새로고침</button>
+          <button onClick={fetchLogs}
+            style={{ padding: '7px 12px', borderRadius: '7px', cursor: 'pointer',
+              background: '#1c1c1c', border: '1px solid #2a2a2a', color: '#666', fontSize: '12px' }}>↺</button>
         </div>
       </div>
 
@@ -157,7 +143,7 @@ export default function SchedulePage() {
         {filterDate && (
           <button onClick={() => setFilterDate('')}
             style={{ padding: '6px 10px', borderRadius: '6px', background: 'transparent',
-              border: '1px solid #333', color: '#555', fontSize: '11px', cursor: 'pointer' }}>✕ 날짜 초기화</button>
+              border: '1px solid #333', color: '#555', fontSize: '11px', cursor: 'pointer' }}>✕ 초기화</button>
         )}
         <select value={filterSite} onChange={e => setFilterSite(e.target.value)}
           style={{ padding: '6px 10px', borderRadius: '6px', background: '#1c1c1c',
@@ -179,10 +165,11 @@ export default function SchedulePage() {
       <div style={{ flex: 1, background: '#1c1c1c', border: '1px solid #2a2a2a', borderRadius: '10px',
         display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-        {/* 헤더 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 120px 120px 90px 90px 60px',
+        {/* 헤더행 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 110px 110px 80px 70px 50px',
           padding: '9px 14px', background: '#161616', borderBottom: '1px solid #2a2a2a',
-          fontSize: '10px', fontWeight: '700', color: '#444', letterSpacing: '0.5px', textTransform: 'uppercase', flexShrink: 0 }}>
+          fontSize: '10px', fontWeight: '700', color: '#444', letterSpacing: '0.5px',
+          textTransform: 'uppercase', flexShrink: 0, alignItems: 'center' }}>
           <div>
             <input type="checkbox" checked={checked.size > 0 && checked.size === filtered.length}
               onChange={toggleAll} style={{ cursor: 'pointer', accentColor: '#1E6AFF' }} />
@@ -195,7 +182,7 @@ export default function SchedulePage() {
           <span></span>
         </div>
 
-        {/* 행 */}
+        {/* 데이터행 */}
         <div style={{ overflowY: 'auto', flex: 1 }}>
           {loading ? (
             <div style={{ padding: '60px', textAlign: 'center', color: '#444' }}>로드 중...</div>
@@ -205,15 +192,15 @@ export default function SchedulePage() {
               <div style={{ fontSize: '14px', color: '#555' }}>예약된 글이 없습니다</div>
             </div>
           ) : filtered.map(log => {
-            const isToday = (log.scheduled_at || '').startsWith(today)
+            const isToday       = (log.scheduled_at || '').startsWith(today)
             const scheduledDate = log.scheduled_at ? new Date(log.scheduled_at) : null
+            const isPast        = scheduledDate ? scheduledDate < new Date() : false
             return (
               <div key={log.id} style={{
-                display: 'grid', gridTemplateColumns: '40px 1fr 120px 120px 90px 90px 60px',
-                padding: '10px 14px', borderBottom: '1px solid #1a1a1a',
+                display: 'grid', gridTemplateColumns: '40px 1fr 110px 110px 80px 70px 50px',
+                padding: '10px 14px', borderBottom: '1px solid #1a1a1a', alignItems: 'center',
                 background: checked.has(log.id) ? 'rgba(30,106,255,0.06)' : isToday ? 'rgba(255,184,0,0.03)' : 'transparent',
                 borderLeft: isToday ? '2px solid rgba(255,184,0,0.4)' : '2px solid transparent',
-                alignItems: 'center',
               }}>
                 <input type="checkbox" checked={checked.has(log.id)} onChange={() => toggleOne(log.id)}
                   style={{ cursor: 'pointer', accentColor: '#1E6AFF' }} />
@@ -232,16 +219,16 @@ export default function SchedulePage() {
                   {scheduledDate ? scheduledDate.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) : '—'}
                   {isToday && <span style={{ fontSize: '9px', marginLeft: '4px', color: '#ffb800' }}>오늘</span>}
                 </div>
-                <div style={{ fontSize: '11px', color: '#888', fontVariantNumeric: 'tabular-nums' }}>
+                <div style={{ fontSize: '11px', color: isPast ? '#ff9966' : '#00c471', fontVariantNumeric: 'tabular-nums' }}>
                   {scheduledDate ? scheduledDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
+                  {isPast && <span style={{ fontSize: '9px', marginLeft: '2px' }}>⏰</span>}
                 </div>
                 <div style={{ fontSize: '11px', color: '#888' }}>
                   {LANG_FLAGS[log.language] || '🌐'} {log.language?.toUpperCase()}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                   <button onClick={() => deleteOne(log.id)}
-                    style={{ background: 'transparent', border: 'none', color: '#333', cursor: 'pointer',
-                      fontSize: '13px', padding: '3px 6px', borderRadius: '3px' }}
+                    style={{ background: 'transparent', border: 'none', color: '#333', cursor: 'pointer', fontSize: '13px', padding: '3px 6px', borderRadius: '3px' }}
                     onMouseEnter={e => (e.currentTarget.style.color = '#ff4444')}
                     onMouseLeave={e => (e.currentTarget.style.color = '#333')}>
                     ✕
@@ -255,8 +242,8 @@ export default function SchedulePage() {
         {/* 푸터 */}
         <div style={{ borderTop: '1px solid #222', padding: '7px 14px', fontSize: '10px',
           color: '#444', display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
-          <span>총 {filtered.length}개 예약 · {checked.size > 0 && `${checked.size}개 선택됨`}</span>
-          <span style={{ color: '#ffb800' }}>🟡 오늘 예약: {todayLogs.length}개</span>
+          <span>총 {filtered.length}개 · {checked.size > 0 && `${checked.size}개 선택`}</span>
+          <span style={{ color: '#ffb800' }}>🟡 오늘: {todayLogs.length}개</span>
         </div>
       </div>
     </div>
