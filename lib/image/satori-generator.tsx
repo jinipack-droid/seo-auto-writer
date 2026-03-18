@@ -504,10 +504,43 @@ export async function generateCardImage(data: CardData): Promise<Buffer> {
 
   const element = makeLayout(li, data, theme, ct)
 
+  // ── 모바일 최적화: 1080x1080 업스케일 ──
+  // 기존 500px 디자인을 2.16배 확대하여 고해상도(1080px) 출력
+  // CSS transform scale을 활용해 모든 레이아웃 코드 변경 없이 업스케일
+  const FINAL_W = 1080
+  const SCALE = FINAL_W / W  // 1080/500 = 2.16
+
+  const scaledElement = React.createElement(
+    'div',
+    {
+      style: {
+        display: 'flex',
+        width: FINAL_W,
+        height: FINAL_W,
+        overflow: 'hidden',
+        background: theme.bg,
+      },
+    },
+    React.createElement(
+      'div',
+      {
+        style: {
+          display: 'flex',
+          transform: `scale(${SCALE.toFixed(4)})`,
+          transformOrigin: 'top left',
+          width: W,
+          height: W,
+          flexShrink: 0,
+        },
+      },
+      element as React.ReactElement
+    )
+  )
+
   // ImageResponse: next/og 내장 (WASM 기반 SVG→PNG, Vercel 호환)
-  const response = new ImageResponse(element as React.ReactElement, {
-    width: W,
-    height: W,
+  const response = new ImageResponse(scaledElement, {
+    width: FINAL_W,
+    height: FINAL_W,
     fonts: fonts.length > 0 ? fonts : [
       { name: 'NS', data: new ArrayBuffer(0), weight: 400, style: 'normal' },
     ],

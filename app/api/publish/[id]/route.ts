@@ -116,9 +116,32 @@ export async function POST(
 
   // ── Step 2: 나머지 이미지를 H2 뒤에 본문에 삽입 ──
   let finalContent = cleanContent
+
+  // ── CSS 개선: 소제목 크기, word-break, 이미지 반응형 ──
+  // H2 소제목 크기 & word-break
+  finalContent = finalContent.replace(
+    /<h2(\s[^>]*)?>/gi,
+    (_, attrs = '') => `<h2${attrs} style="font-size:1.7em;font-weight:700;word-break:keep-all;overflow-wrap:break-word;line-height:1.4;margin:1.5em 0 0.5em;">`
+  )
+  // H3 소제목 크기 & word-break
+  finalContent = finalContent.replace(
+    /<h3(\s[^>]*)?>/gi,
+    (_, attrs = '') => `<h3${attrs} style="font-size:1.35em;font-weight:600;word-break:keep-all;overflow-wrap:break-word;line-height:1.4;margin:1.2em 0 0.4em;">`
+  )
+  // 본문 p 태그: word-break 적용
+  finalContent = finalContent.replace(
+    /<p(\s[^>]*)?>/gi,
+    (_, attrs = '') => `<p${attrs} style="word-break:keep-all;overflow-wrap:break-word;line-height:1.8;">`
+  )
+  // img 반응형 (모바일 대응)
+  finalContent = finalContent.replace(
+    /<img(\s[^>]*?)>/gi,
+    (_, attrs = '') => `<img${attrs} style="max-width:100%;height:auto;display:block;">`
+  )
+
   if (mediaItems.length > 1) {
     const imgTags = mediaItems.slice(1).map((media, idx) =>
-      `\n<figure class="wp-block-image size-full"><img src="${media.url}" alt="${finalTitle} 이미지 ${idx + 2}" /></figure>\n`
+      `\n<figure class="wp-block-image size-full"><img src="${media.url}" alt="${finalTitle} 이미지 ${idx + 2}" style="max-width:100%;height:auto;display:block;" /></figure>\n`
     )
     const h2Regex = /<\/h2>/gi
     const h2Positions: number[] = []
