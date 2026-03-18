@@ -75,6 +75,7 @@ export default function PersonasPage() {
   const [bulkPPDMax, setBulkPPDMax] = useState(2)
   const [bulkSites, setBulkSites] = useState<string[]>([])
   const [bulkMsg,   setBulkMsg]   = useState('')
+  const [bulkLoading, setBulkLoading] = useState(false)
 
   // ── 번역 ──
   const [translating, setTranslating] = useState(false)
@@ -138,6 +139,30 @@ export default function PersonasPage() {
 
   // 팝업 열릴 때 gen 상태 초기화
   useEffect(() => { setGenKw(''); setGenSiteId(''); setGenResult(null) }, [popup])
+
+  // ── 예약 일괄 발행 실행 ──
+  const handleBulkGenerate = async () => {
+    if (!bulkStart || !bulkEnd || !bulkSites.length) return
+    setBulkLoading(true)
+    setBulkMsg('⏳ 글 생성 중... 잠시 기다려주세요 (글 개수에 따라 수분 소요)')
+    try {
+      const r = await fetch('/api/bulk-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteIds: bulkSites, ppdMin: bulkPPDMin, ppdMax: bulkPPDMax }),
+      })
+      const d = await r.json()
+      if (r.ok && d.success) {
+        setBulkMsg(`✅ ${d.totalGenerated}개 글 생성 완료! 랜덤 예약 시각에 자동 발행됩니다.`)
+      } else {
+        setBulkMsg(`❌ 오류: ${d.error || '발행 실패'}`)
+      }
+    } catch {
+      setBulkMsg('❌ 서버 연결 오류')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
 
   // ── 팝업 내 글 생성 발행 ──
   const handleGenerate = async () => {
@@ -640,12 +665,12 @@ export default function PersonasPage() {
             )}
 
             <button
-              disabled={!bulkStart || !bulkEnd || bulkSites.length === 0}
-              onClick={() => setBulkMsg(`✅ ${bulkStart} ~ ${bulkEnd} 예약 스케줄 설정 완료!`)}
-              style={{ width:'100%', padding:'12px', borderRadius:'8px', cursor:'pointer',
-                background:'#1E6AFF', border:'none', color:'#fff', fontSize:'14px', fontWeight:'800',
+              disabled={bulkLoading || !bulkStart || !bulkEnd || bulkSites.length === 0}
+              onClick={handleBulkGenerate}
+              style={{ width:'100%', padding:'12px', borderRadius:'8px', cursor: (bulkLoading || !bulkStart || !bulkEnd || !bulkSites.length) ? 'not-allowed' : 'pointer',
+                background: bulkLoading ? '#333' : '#1E6AFF', border:'none', color:'#fff', fontSize:'14px', fontWeight:'800',
                 opacity: (!bulkStart || !bulkEnd || bulkSites.length === 0) ? 0.4 : 1 }}>
-              📅 예약 스케줄 설정
+              {bulkLoading ? '⏳ 글 생성 중...' : '🚀 지금 바로 발행 시작'}
             </button>
           </div>
         </div>
