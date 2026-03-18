@@ -28,9 +28,17 @@ export default function SchedulePage() {
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
-      const res  = await fetch('/api/logs?status=scheduled&limit=500')
-      const data = await res.json()
-      setLogs(data.logs || [])
+      // scheduled + pending 모두 조회 (발행 대기 중인 글 전체)
+      const [r1, r2] = await Promise.all([
+        fetch('/api/logs?status=scheduled&limit=500'),
+        fetch('/api/logs?status=pending&limit=500'),
+      ])
+      const d1 = await r1.json()
+      const d2 = await r2.json()
+      const combined = [...(d1.logs || []), ...(d2.logs || [])]
+      // scheduled_at 기준 정렬
+      combined.sort((a, b) => (a.scheduled_at || '').localeCompare(b.scheduled_at || ''))
+      setLogs(combined)
     } finally {
       setLoading(false)
     }
