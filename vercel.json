@@ -11,6 +11,7 @@
   ],
   "functions": {
     "app/api/generate/route.ts": { "maxDuration": 300 },
+    "app/api/bulk-generate/route.ts": { "maxDuration": 300 },
     "app/api/cron/generate/route.ts": { "maxDuration": 300 },
     "app/api/cron/publish/route.ts": { "maxDuration": 300 }
   }

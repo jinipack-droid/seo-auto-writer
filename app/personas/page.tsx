@@ -153,7 +153,12 @@ export default function PersonasPage() {
       })
       const d = await r.json()
       if (r.ok && d.success) {
-        setBulkMsg(`✅ ${d.totalGenerated}개 글 생성 완료! 랜덤 예약 시각에 자동 발행됩니다.`)
+        if (d.totalGenerated > 0) {
+          setBulkMsg(`✅ ${d.totalGenerated}개 글 생성 완료! 오늘 중 자동 발행됩니다.`)
+        } else {
+          const errDetail = (d.results || []).map((res: {siteName: string; error?: string}) => `${res.siteName}: ${res.error || '알 수 없음'}`).join(' / ')
+          setBulkMsg(`⚠️ 0개 생성됨. 원인: ${errDetail || '로그 확인 필요'}`)
+        }
       } else {
         setBulkMsg(`❌ 오류: ${d.error || '발행 실패'}`)
       }
@@ -670,7 +675,7 @@ export default function PersonasPage() {
               style={{ width:'100%', padding:'12px', borderRadius:'8px', cursor: (bulkLoading || !bulkStart || !bulkEnd || !bulkSites.length) ? 'not-allowed' : 'pointer',
                 background: bulkLoading ? '#333' : '#1E6AFF', border:'none', color:'#fff', fontSize:'14px', fontWeight:'800',
                 opacity: (!bulkStart || !bulkEnd || bulkSites.length === 0) ? 0.4 : 1 }}>
-              {bulkLoading ? '⏳ 글 생성 중...' : '🚀 지금 바로 발행 시작'}
+              {bulkLoading ? '⏳ 글 생성 중...' : '📅 예약 스케줄 설정'}
             </button>
           </div>
         </div>
