@@ -6,6 +6,7 @@ const NAV = [
   { icon: '👤', label: '아이디&페르소나', href: '/personas' },
   { icon: '🌐', label: '등록 사이트',     href: '/sites'    },
   { icon: '📋', label: '발행 로그',       href: '/logs'     },
+  { icon: '📅', label: '예약 관리',       href: '/schedule' },
   { icon: '🔑', label: '키워드',          href: '/keywords' },
   { icon: '⚙',  label: '설정',            href: '/settings' },
 ]
