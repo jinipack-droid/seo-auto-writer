@@ -7,12 +7,9 @@ export interface ScheduleConfig {
   type: 'immediate' | 'scheduled'
   dates: string[]           // ISO date strings: '2025-03-10'
   times: string[]           // per-date times: '09:00'
-  frequency: FrequencyMode
   postsPerDay: number
   totalPosts: number
 }
-
-type FrequencyMode = 'daily' | 'weekdays' | 'weekly' | 'custom'
 
 interface SchedulePopupProps {
   open: boolean
@@ -45,7 +42,6 @@ export default function SchedulePopup({ open, onClose, onConfirm }: SchedulePopu
   const [rangeStart,  setRangeStart]  = useState<Date | null>(null)
   const [rangeEnd,    setRangeEnd]    = useState<Date | null>(null)
   const [hovered,     setHovered]     = useState<Date | null>(null)
-  const [frequency,   setFrequency]   = useState<FrequencyMode>('daily')
   const [postsPerDay, setPostsPerDay] = useState(1)
   const [startTime,   setStartTime]   = useState('09:00')
   const [randomDelay, setRandomDelay] = useState(true)
@@ -53,27 +49,18 @@ export default function SchedulePopup({ open, onClose, onConfirm }: SchedulePopu
   // 최대 1년 후
   const maxDate = new Date(today); maxDate.setFullYear(maxDate.getFullYear() + 1)
 
-  // 날짜 범위 → 실제 발행 날짜 배열 계산
+  // 날짜 범위 → 실제 발행 날짜 배열 계산 (시작~종료 사이 매일 포함)
   const computeDates = useCallback((): string[] => {
     if (!rangeStart) return []
     const end = rangeEnd || rangeStart
     const dates: string[] = []
     let cur = new Date(rangeStart)
     while (cur <= end) {
-      const dow = cur.getDay()
-      if (frequency === 'daily') {
-        dates.push(fmtDate(cur))
-      } else if (frequency === 'weekdays') {
-        if (dow >= 1 && dow <= 5) dates.push(fmtDate(cur))
-      } else if (frequency === 'weekly') {
-        if (dow === rangeStart.getDay()) dates.push(fmtDate(cur))
-      } else {
-        dates.push(fmtDate(cur))  // custom = daily for now
-      }
+      dates.push(fmtDate(cur))
       cur = addDays(cur, 1)
     }
     return dates
-  }, [rangeStart, rangeEnd, frequency])
+  }, [rangeStart, rangeEnd])
 
   const selectedDates = computeDates()
   const totalPosts    = selectedDates.length * postsPerDay
@@ -117,7 +104,6 @@ export default function SchedulePopup({ open, onClose, onConfirm }: SchedulePopu
       type: 'scheduled',
       dates: selectedDates,
       times,
-      frequency,
       postsPerDay,
       totalPosts,
     })
@@ -227,40 +213,17 @@ export default function SchedulePopup({ open, onClose, onConfirm }: SchedulePopu
           {/* ── 설정 패널 ── */}
           <div style={{ flex:1, display:'flex', flexDirection:'column', gap:'14px' }}>
 
-            {/* 발행 주기 */}
-            <div>
-              <div style={labelStyle}>📆 발행 주기</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                {([
-                  ['daily',    '매일',       '선택 기간 내 매일 발행'],
-                  ['weekdays', '평일만',     '월~금 (주 5회)'],
-                  ['weekly',   '주 1회',     '같은 요일 매주 발행'],
-                  ['custom',   '사용자 지정','날짜 개별 선택'],
-                ] as const).map(([v, l, d]) => (
-                  <button key={v} onClick={() => setFrequency(v)} style={{
-                    padding:'8px 10px', borderRadius:'7px', cursor:'pointer', textAlign:'left',
-                    background: frequency===v ? 'rgba(30,106,255,0.12)' : '#222',
-                    border: `1px solid ${frequency===v?'#1E6AFF':'#333'}`,
-                    transition:'all 0.15s',
-                  }}>
-                    <div style={{ fontSize:'12px', fontWeight:'600', color: frequency===v?'#1E6AFF':'#bbb' }}>{l}</div>
-                    <div style={{ fontSize:'10px', color:'#555', marginTop:'1px' }}>{d}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 일일 발행 수 */}
+            {/* 사이트당 하루 발행 글수 */}
             <div>
               <div style={{ ...labelStyle, marginBottom:'6px' }}>
-                📝 일일 발행 수 &nbsp;
+                📝 사이트당 하루 발행 글수 &nbsp;
                 <span style={{ color:'#1E6AFF', fontWeight:'800' }}>{postsPerDay}개</span>
               </div>
-              <input type="range" min={1} max={10} value={postsPerDay}
+              <input type="range" min={1} max={20} value={postsPerDay}
                 onChange={e => setPostsPerDay(+e.target.value)}
                 style={{ width:'100%', accentColor:'#1E6AFF' }} />
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#444', marginTop:'2px' }}>
-                <span>1개 / 일</span><span style={{ color:'#1E6AFF' }}>권장: 2~3개</span><span>10개 / 일</span>
+                <span>1개 / 일</span><span style={{ color:'#1E6AFF' }}>권장: 1~2개</span><span>20개 / 일</span>
               </div>
             </div>
 

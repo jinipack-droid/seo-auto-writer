@@ -738,12 +738,48 @@ export const CATEGORY_SYSTEM_INSTRUCTIONS: Record<string, string> = {
   lifestyle: `You are a lifestyle coach and wellness expert. Combine behavioral science with practical health-adjacent advice. Connect lifestyle choices (sleep, stress, exercise) to medical outcomes. Use relatable, conversational tone backed by health research.`,
 
   'functional-food': `You are a health food expert and registered dietitian specializing in functional foods and nutraceuticals. Provide evidence-based information on health functional foods including Korean red ginseng, probiotics, collagen, omega-3, and adaptogens. Explain clinical evidence, dosages, quality markers, and what to look for when purchasing. Compare Korean health food products with global alternatives. Help readers make informed purchasing decisions backed by science.`,
+
+  diet: `You are a registered dietitian and culinary nutritionist. Provide practical, science-backed dietary advice and healthy recipe ideas. Explain macronutrient balance, meal planning strategies, and evidence-based eating patterns (Mediterranean, DASH, plant-based). Include realistic meal prep tips, calorie considerations, and food substitution ideas. Make healthy eating approachable and enjoyable for everyday readers.`,
+
+  travel: `You are an experienced travel writer and wellness travel consultant with expertise in Asia-Pacific destinations. Provide engaging, practical travel content covering destinations, itineraries, budget tips, local culture, and hidden gems. Connect travel experiences to wellbeing and lifestyle enrichment. Include practical logistics (transportation, accommodation, best seasons) alongside inspiring destination narratives.`,
+}
+
+/**
+ * 다국어 카테고리명 → 영어 키 매핑 (한국어 + 일본어 + 영어 변형)
+ */
+const CATEGORY_MAP: Record<string, string> = {
+  // ── 한국어 ──
+  '건강/의료 정보': 'health',
+  '건강기능식품': 'functional-food',
+  '라이프스타일': 'lifestyle',
+  '뷰티/미용': 'skin-care',
+  '식단/레시피': 'diet',
+  '여행': 'travel',
+  // 축약형
+  '건강': 'health',
+  '뷰티': 'skin-care',
+  '식단': 'diet',
+  // ── 일본어 ──
+  '健康・医療情報': 'health',
+  '健康機能食品': 'functional-food',
+  'ライフスタイル': 'lifestyle',
+  '美容・コスメ': 'skin-care',
+  '食事・レシピ': 'diet',
+  '旅行': 'travel',
+  // ── 영어 변형 ──
+  'HEALTH': 'health',
+  'Beauty': 'skin-care',
+  'beauty': 'skin-care',
+  'health': 'health',
+  'Travel': 'travel',
+  'Diet': 'diet',
 }
 
 /**
  * 카테고리에 맞는 시스템 지시 반환
- * 카테고리가 없으면 health/general 반환
+ * 한국어·일본어·영어 카테고리명 모두 지원. 없으면 health 폴백
  */
 export function getCategoryInstruction(category: string): string {
-  return CATEGORY_SYSTEM_INSTRUCTIONS[category] ?? CATEGORY_SYSTEM_INSTRUCTIONS['health']
+  const key = CATEGORY_MAP[category] ?? category
+  return CATEGORY_SYSTEM_INSTRUCTIONS[key] ?? CATEGORY_SYSTEM_INSTRUCTIONS['health']
 }

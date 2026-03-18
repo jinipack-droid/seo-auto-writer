@@ -71,8 +71,8 @@ export default function PersonasPage() {
   const [showBulk,  setShowBulk]  = useState(false)
   const [bulkStart, setBulkStart] = useState('')
   const [bulkEnd,   setBulkEnd]   = useState('')
-  const [bulkPPD,   setBulkPPD]   = useState(1)
-  const [bulkFreq,  setBulkFreq]  = useState<'daily'|'weekdays'|'weekly3'|'weekly'>('daily')
+  const [bulkPPDMin, setBulkPPDMin] = useState(1)
+  const [bulkPPDMax, setBulkPPDMax] = useState(2)
   const [bulkSites, setBulkSites] = useState<string[]>([])
   const [bulkMsg,   setBulkMsg]   = useState('')
 
@@ -521,7 +521,7 @@ export default function PersonasPage() {
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
               <div>
                 <div style={{ fontSize:'16px', fontWeight:'800', color:'#fff' }}>📅 예약 일괄 발행</div>
-                <div style={{ fontSize:'11px', color:'#555', marginTop:'3px' }}>발행 기간과 빈도를 설정하면 자동 스케줄이 생성됩니다</div>
+                <div style={{ fontSize:'11px', color:'#555', marginTop:'3px' }}>날짜 범위를 선택하면 해당 기간 매일 발행됩니다</div>
               </div>
               <button onClick={() => setShowBulk(false)} style={{ background:'none', border:'none', color:'#444', fontSize:'20px', cursor:'pointer' }}>✕</button>
             </div>
@@ -559,33 +559,43 @@ export default function PersonasPage() {
               </div>
             </div>
 
-            {/* 하루 발행 수 */}
+            {/* 사이트당 하루 발행 글수 (랜덤 범위) */}
             <div style={{ marginBottom:'16px' }}>
-              <div style={{ fontSize:'10px', fontWeight:'700', color:'#555', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' }}>하루 발행 글 수</div>
-              <div style={{ display:'flex', gap:'6px' }}>
-                {[1,2,3].map(n => (
-                  <button key={n} onClick={() => setBulkPPD(n)} style={{
-                    flex:1, padding:'8px', borderRadius:'6px', cursor:'pointer', fontSize:'14px', fontWeight:'700',
-                    background: bulkPPD === n ? 'rgba(30,106,255,0.15)' : '#1c1c1c',
-                    border: `1px solid ${bulkPPD === n ? '#1E6AFF' : '#2a2a2a'}`,
-                    color: bulkPPD === n ? '#1E6AFF' : '#777',
-                  }}>{n}개</button>
-                ))}
+              <div style={{ fontSize:'10px', fontWeight:'700', color:'#555', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'10px' }}>
+                사이트당 하루 발행 글수 &nbsp;
+                <span style={{ color:'#1E6AFF', fontWeight:'800' }}>{bulkPPDMin}~{bulkPPDMax}개 랜덤</span>
+              </div>
+              <div style={{ display:'flex', gap:'12px', alignItems:'center' }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:'10px', color:'#666', marginBottom:'4px' }}>최소</div>
+                  <input type="range" min={1} max={20} value={bulkPPDMin}
+                    onChange={e => { const v = +e.target.value; setBulkPPDMin(v); if (v > bulkPPDMax) setBulkPPDMax(v) }}
+                    style={{ width:'100%', accentColor:'#1E6AFF' }} />
+                  <div style={{ fontSize:'10px', color:'#1E6AFF', textAlign:'center', marginTop:'2px' }}>{bulkPPDMin}개</div>
+                </div>
+                <div style={{ fontSize:'16px', color:'#444', paddingTop:'8px' }}>~</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:'10px', color:'#666', marginBottom:'4px' }}>최대</div>
+                  <input type="range" min={1} max={20} value={bulkPPDMax}
+                    onChange={e => { const v = +e.target.value; setBulkPPDMax(v); if (v < bulkPPDMin) setBulkPPDMin(v) }}
+                    style={{ width:'100%', accentColor:'#1E6AFF' }} />
+                  <div style={{ fontSize:'10px', color:'#1E6AFF', textAlign:'center', marginTop:'2px' }}>{bulkPPDMax}개</div>
+                </div>
+              </div>
+              <div style={{ fontSize:'10px', color:'#555', marginTop:'6px', textAlign:'center' }}>
+                💡 매일 {bulkPPDMin}~{bulkPPDMax}개 사이에서 랜덤 발행 → 자연스러운 패턴
               </div>
             </div>
 
-            {/* 발행 빈도 */}
+            {/* 발행 시각 */}
             <div style={{ marginBottom:'16px' }}>
-              <div style={{ fontSize:'10px', fontWeight:'700', color:'#555', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' }}>발행 빈도</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                {([['daily','매일 (7일)'],['weekdays','평일만 (월~금)'],['weekly3','주 3회'],['weekly','주 1회']] as [typeof bulkFreq, string][]).map(([v,l]) => (
-                  <button key={v} onClick={() => setBulkFreq(v)} style={{
-                    padding:'8px', borderRadius:'6px', cursor:'pointer', fontSize:'12px',
-                    background: bulkFreq === v ? 'rgba(30,106,255,0.15)' : '#1c1c1c',
-                    border: `1px solid ${bulkFreq === v ? '#1E6AFF' : '#2a2a2a'}`,
-                    color: bulkFreq === v ? '#1E6AFF' : '#777',
-                  }}>{l}</button>
-                ))}
+              <div style={{ fontSize:'10px', fontWeight:'700', color:'#555', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' }}>발행 시각</div>
+              <div style={{ padding:'10px 14px', borderRadius:'8px', background:'rgba(0,196,113,0.06)', border:'1px solid rgba(0,196,113,0.25)', display:'flex', alignItems:'center', gap:'10px' }}>
+                <span style={{ fontSize:'16px' }}>🎲</span>
+                <div>
+                  <div style={{ fontSize:'12px', color:'#00c471', fontWeight:'700' }}>하루 중 랜덤 시간 발행</div>
+                  <div style={{ fontSize:'10px', color:'#555', marginTop:'2px' }}>오전 6시 ~ 자정 사이 랜덤 → 사람처럼 자연스러운 패턴</div>
+                </div>
               </div>
             </div>
 
@@ -610,14 +620,14 @@ export default function PersonasPage() {
 
             {/* 예상 총 발행 수 */}
             {bulkStart && bulkEnd && (() => {
-              const d = Math.max(0, Math.ceil((new Date(bulkEnd).getTime() - new Date(bulkStart).getTime()) / 86400000))
-              const active = bulkFreq === 'daily' ? d : bulkFreq === 'weekdays' ? Math.round(d*5/7) : bulkFreq === 'weekly3' ? Math.round(d*3/7) : Math.round(d/7)
-              const total = active * bulkPPD * Math.max(1, bulkSites.length)
+              const d = Math.max(0, Math.ceil((new Date(bulkEnd).getTime() - new Date(bulkStart).getTime()) / 86400000) + 1)
+              const totalMin = d * bulkPPDMin * Math.max(1, bulkSites.length)
+              const totalMax = d * bulkPPDMax * Math.max(1, bulkSites.length)
               return (
                 <div style={{ padding:'12px 16px', borderRadius:'8px', background:'rgba(30,106,255,0.07)',
                   border:'1px solid rgba(30,106,255,0.2)', marginBottom:'16px', textAlign:'center' }}>
-                  <div style={{ fontSize:'24px', fontWeight:'800', color:'#1E6AFF' }}>{total.toLocaleString()}건</div>
-                  <div style={{ fontSize:'11px', color:'#555', marginTop:'2px' }}>예상 총 발행 ({d}일 × {bulkPPD}개 × {Math.max(1,bulkSites.length)}사이트)</div>
+                  <div style={{ fontSize:'22px', fontWeight:'800', color:'#1E6AFF' }}>{totalMin.toLocaleString()}~{totalMax.toLocaleString()}건</div>
+                  <div style={{ fontSize:'11px', color:'#555', marginTop:'2px' }}>예상 총 발행 ({d}일 × {bulkPPDMin}~{bulkPPDMax}개 랜덤 × {Math.max(1,bulkSites.length)}사이트)</div>
                 </div>
               )
             })()}
